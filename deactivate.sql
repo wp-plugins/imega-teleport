@@ -1,0 +1,1 @@
+delete from {$table_prefix}options where option_name like'imegateleport%';drop table if exists {$table_prefix}imegateleport;
