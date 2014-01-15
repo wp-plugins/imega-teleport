@@ -10,7 +10,7 @@ License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
 Import your products from your 1C to your new WooCommerce store.
-iMegaTeleport обеспечивает взаимосвязь интернет-магазина и 1С.
+Обеспечивает взаимосвязь интернет-магазина и 1С.
 
 == Description ==
 
