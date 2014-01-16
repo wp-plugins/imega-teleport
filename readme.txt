@@ -1,5 +1,5 @@
 === iMega Teleport ===
-Contributors: iMega ltd.
+Contributors: iMega
 Donate link: http://teleport.imega.ru/donate
 Tags: 1C, import, ecommerce, e-commerce, commerce, woothemes, wordpress ecommerce, affiliate, store, sales, sell, shop, shopping, cart, checkout, configurable, variable, widgets, reports, download, downloadable, digital, inventory, stock, reports, shipping, tax
 Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=RGWW29C527HGQ
@@ -10,7 +10,7 @@ License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
 Import your products from your 1C to your new WooCommerce store.
-Обеспечивает взаимосвязь интернет-магазина и 1С.
+Взаимосвязь интернет-магазина и 1С.
 
 == Description ==
 
@@ -37,6 +37,8 @@ iMegaTeleport выгружает данные о товаре: название,
 Количество товаров, которое можно выгрузить ограничено 
 возможностями сервера, на котором работает программа 1С.
 
+Ознакомьтесь пожалуйста с [инструкцией](http://teleport.imega.ru/instructions).
+
 == Installation ==
 
 = In English. =
@@ -54,6 +56,8 @@ iMegaTeleport выгружает данные о товаре: название,
 3. Зайдите на страницу «Плагины» в панели управления блогом 
    и нажмите «Активировать» у iMegaTeleport.
 4. Выберите пункт iMegaTeleport в меню Параметры, для настройки.
+5. [Настройка 1С для работы с интернет-магазином](http://teleport.imega.ru/instructions#ch3)
+6. [Создание в 1С узла обмена с интернет-магазином](http://teleport.imega.ru/instructions#ch4)
 
 == Frequently Asked Questions ==
 
