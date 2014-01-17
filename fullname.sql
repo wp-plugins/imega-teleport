@@ -1,0 +1,1 @@
+update {$table_prefix}imega_prod p left join {$table_prefix}imega_misc m on m.guid=p.guid set p.title=m.val,p.slug=m.valSlug where m.label='Полное наименование';
