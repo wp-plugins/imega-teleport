@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 0.1
+ * Version: 1.0
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -88,8 +88,6 @@ if (! class_exists ( 'iMegaTeleport' )) {
 	define ( 'PROPERTYVALUES', 'ЗначенияСвойств' );
 	define ( 'PROPERTYVALUE', 'ЗначенияСвойства' );
 	
-	define ( 'UPLOADDIR', '/imegateleport_uploads/' );
-	
 	/**
 	 * iMegaTeleport Class
 	 *
@@ -107,15 +105,17 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		protected $filenameOffers = 'offers.xml';
 		protected $filenameTables = 'tabs.sql';
 		protected $filenameBL = 'woocommerce.sql';
+		protected $force = false;
+		protected $gogo = false;
 		protected $name = 'iMega Teleport';
+		protected $maxAllowedPacket = 0;
 		protected $mnemo = 'imegateleport';
 		protected $mysqli = null;
 		protected $query;
-		protected $rights = 0777;
 		protected $table_prefix = null;
 		protected $upload_dir;
 		protected $sets = array ();
-		protected $zip = 'no';
+		protected $zip = false;
 		/**
 		 * Конструктор класса
 		 */
@@ -124,15 +124,10 @@ if (! class_exists ( 'iMegaTeleport' )) {
 					$this,
 					'errorHandler' 
 			) );
-			
-			$gogo = false;
 			/*
-			 * Префикс таблиц в БД
+			 * Опции
 			 */
-			global $table_prefix;
-			$this->table_prefix = $table_prefix;
-			$this->upload_dir = wp_upload_dir ();
-			
+			$this->options ();
 			/*
 			 * Если AJAX, то нет смысла дальше продолжать
 			 */
@@ -147,29 +142,31 @@ if (! class_exists ( 'iMegaTeleport' )) {
 			 */
 			$this->connectMysql ();
 			/*
+			 * Проверка возможности записи на диск
+			 */
+			$filename = $this->path ( 'basedir' ) . $this->path ( $this->mnemo );
+			$this->folder ( $filename );
+			/*
 			 * Настройки
 			 */
 			$this->sets ['fullname'] = get_option ( 'imegateleport-settings-fullname' );
 			$this->sets ['kod'] = get_option ( 'imegateleport-settings-kod' );
 			$this->sets ['postinstall'] = get_option ( 'imegateleport-settings-postinstall' );
 			if ($this->progress () === false) {
-				$gogo = $this->routers ();
+				$this->gogo = $this->routers ();
 			}
-			
-			if ((isset ( $_GET ['page'] ) && $_GET ['page'] == 'imegateleport_settings') || $this->progress () !== false || $this->sets ['postinstall'] == 'true')
-				$this->progressAjaxScript ();
-			
-			if ($gogo) {
-				$this->progressAjaxScript ();
+			/*
+			 * if ((isset ( $_GET ['page'] ) && $_GET ['page'] == 'imegateleport_settings') || $this->progress () !== false || $this->sets ['postinstall'] == 'true') $this->progressAjaxScript ();
+			 */
+			if ($this->gogo === true) {
+				// $this->progressAjaxScript ();
 				$this->runQuery ();
-				//$this->log($this->query);
+				$this->log ( '==QUERY==' );
+				$this->log ( $this->query );
 				$this->run ();
 			}
-			
-			if ($this->error) {
-				$this->pluginMessage ( 'error', $this->error, true, false );
-				delete_option ( 'imegateleport_progress' );
-			}
+			$this->log ( '==END==' );
+			restore_error_handler ();
 		}
 		/**
 		 * Авторизация
@@ -180,9 +177,6 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 */
 		protected function auth($user, $pass) {
 			$result = false;
-			
-			if (! function_exists ( 'wp_authenticate()' ))
-				require_once (ABSPATH . 'wp-includes/pluggable.php');
 			
 			$user = wp_authenticate ( $user, $pass );
 			
@@ -203,9 +197,6 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return wp_user
 		 */
 		protected function authEx($user, $pass) {
-			if (! function_exists ( 'wp_authenticate()' ))
-				require_once (ABSPATH . 'wp-includes/pluggable.php');
-			
 			$creds = array (
 					'user_login' => $user,
 					'user_password' => $pass,
@@ -240,7 +231,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * Соединение с БД
 		 */
 		function connectMysql() {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			$this->mysqli = new mysqli ( DB_HOST, DB_USER, DB_PASSWORD, DB_NAME );
@@ -287,7 +278,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 					$result = true;
 					break;
 				case 'postinstall' :
-					delete_option('imegateleport-settings-' . $param);
+					delete_option ( 'imegateleport-settings-' . $param );
 					$result = false;
 					break;
 				case 'zip' :
@@ -296,6 +287,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 			}
 			if ($result) {
 				update_option ( 'imegateleport-settings-' . $param, $value );
+				$this->log ( "==UPDATE OPTION (imegateleport-settings-$param) = $value" );
 			}
 			return $result;
 		}
@@ -343,9 +335,18 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 */
 		function transfer() {
 			$result = false;
+			
 			switch ($_GET ['mode']) {
 				case 'checkauth' :
-					$user = $this->auth ( $_SERVER ['PHP_AUTH_USER'], $_SERVER ['PHP_AUTH_PW'] );
+					$login = $_SERVER ['PHP_AUTH_USER'];
+					$pass = $_SERVER ['PHP_AUTH_PW'];
+					if (defined ( 'IMEGATELEPORT_AUTH_USER' ))
+						$login = IMEGATELEPORT_AUTH_USER;
+					if (defined ( 'IMEGATELEPORT_AUTH_PW' ))
+						$pass = IMEGATELEPORT_AUTH_PW;
+					$user = $this->auth ( $login, $pass );
+					$this->log ( "==USER AUTH==" );
+					$this->log ( $user );
 					if ($user)
 						echo "success\n";
 					else
@@ -354,59 +355,58 @@ if (! class_exists ( 'iMegaTeleport' )) {
 					break;
 				
 				case 'init' :
-					$zip = get_option ( 'imegateleport-settings-zip' );
-					if (class_exists ( 'ZipArchive' ) && $zip == 'true') {
-						$this->zip = 'yes';
-					}
-					/*
+					$maxBodySize = get_option ( 'imegateleport-settings-max-body-size', 0 );
+					if (defined ( 'IMEGATELEPORT_MAX_BODY_SIZE' ))
+						if (IMEGATELEPORT_MAX_BODY_SIZE > 0) {
+							$maxBodySize = IMEGATELEPORT_MAX_BODY_SIZE;
+						}
+						/*
 					 * if (! function_exists('wp_validate_auth_cookie()')) require_once(ABSPATH.'wp-includes/pluggable.php'); $id = wp_validate_auth_cookie('','auth'); $this->log($id); $this->log(ini_get('post_max_size')); echo "zip=no\n"; echo "file_limit="; //post_max_size upload_max_filesize echo $this->inBytes(ini_get('upload_max_filesize')); echo "\n";
 					 */
-					echo "zip={$this->zip}\n";
+					if ($this->zip)
+						$zip = 'yes';
+					else
+						$zip = 'no';
+					echo "zip={$zip}\n";
+					$this->log ( "==ZIP SUPPORT = {$this->zip}" );
 					// post_max_size upload_max_filesize
 					$bytes = $this->inBytes ( ini_get ( 'upload_max_filesize' ) );
+					if ($maxBodySize > 0) {
+						$bytes = $maxBodySize;
+					}
+					$this->log ( "==MAX BODY SIZE = $bytes" );
 					echo "file_limit=$bytes\n";
 					exit ();
 					break;
 				
 				case "file" :
 					$post = file_get_contents ( 'php://input' ); // or $HTTP_RAW_POST_DATA
-					
 					$filename = $this->path ( 'basedir' ) . $this->path ( $this->mnemo ) . $_GET ['filename'];
-					
-					wp_mkdir_p ( dirname ( $filename ) );
-					
+					$this->folder ( dirname ( $filename ) );
 					$mode = 'w';
-					
 					if ($filename == $this->temp ()) {
 						$mode = 'a';
 					}
-					
 					$f = fopen ( $filename, $mode );
 					fwrite ( $f, $post );
 					fclose ( $f );
-					
 					$this->temp ( $filename );
-					
 					echo "success\n";
 					exit ();
 					break;
-					
-					break;
+				
 				case "import" :
 					$this->progress ( 14 );
-					
 					$filename = $this->temp ();
-					
-					if ($this->unzip ( $filename, dirname ( $filename ) . '/' )) {
-						unlink ( $filename );
+					if (! empty ( $filename ) && $this->zip === true) {
+						if ($this->unzip ( $filename, dirname ( $filename ) . '/' ))
+							unlink ( $filename );
 					}
-					
 					$result = true;
 					echo "success\n";
 					$this->temp ( '', true );
 					break;
 			}
-			
 			return $result;
 		}
 		/**
@@ -436,7 +436,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return bool
 		 */
 		private function existsBusinessLogic($name) {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			$isInstall = false;
@@ -455,12 +455,25 @@ if (! class_exists ( 'iMegaTeleport' )) {
 			return $isInstall;
 		}
 		/**
+		 * Создание рабочей директории
+		 *
+		 * @param string $filename        	
+		 * @return void
+		 */
+		function folder($filename) {
+			if (! wp_mkdir_p ( $filename )) {
+				$this->error .= '. ' . $filename;
+				return;
+			}
+			
+			if (! is_writable ( $filename )) {
+				$this->error = "The $filename is not writable.";
+			}
+		}
+		/**
 		 * Action Hooks
 		 */
 		function hooks() {
-			if ($this->error) {
-				return;
-			}
 			/*
 			 * Отобразить ссылки на проект
 			 */
@@ -505,7 +518,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 			) );
 		}
 		/**
-		 * Возвращает запись 2M как 2048
+		 * Возвращает запись 2M как байты
 		 *
 		 * @param string $val        	
 		 * @return Ambigous <number, string>
@@ -530,7 +543,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return string
 		 */
 		function loadFile($filename) {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			$dir = dirname ( __FILE__ );
@@ -543,7 +556,8 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 */
 		function errorHandler($errno, $errstr, $errfile, $errline) {
 			$this->error = $errstr;
-			//$this->log ( $errno . $errstr . $errfile . $errline );
+			$this->log ( "==ERROR==" );
+			$this->log ( "No:$errno, $errstr, FILE: $errfile, LINE: $errline" );
 		}
 		/**
 		 * mysqli escape_string function wrap
@@ -559,7 +573,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return string
 		 */
 		function loadImport() {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			$file = $this->path ( 'baseurl' ) . $this->path ( $this->mnemo ) . $this->filenameImport;
@@ -688,7 +702,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return string
 		 */
 		function loadOffers() {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			$file = $this->path ( 'baseurl' ) . $this->path ( $this->mnemo ) . $this->filenameOffers;
@@ -776,9 +790,12 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @param array $value        	
 		 */
 		protected function log($value) {
-			$f = fopen ( $this->path ( 'basedir' ) . 'imegateleport.log', 'a' );
-			fwrite ( $f, print_r ( $value, true ) . "\n" );
-			fclose ( $f );
+			if (defined ( 'IMEGATELEPORT_LOG' ))
+				if (IMEGATELEPORT_LOG === true) {
+					$f = fopen ( $this->path ( 'basedir' ) . 'imegateleport.log', 'a' );
+					fwrite ( $f, print_r ( $value, true ) . "\n" );
+					fclose ( $f );
+				}
 		}
 		/**
 		 * Обработка уведомлений и реакции пользователя на них
@@ -786,13 +803,52 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return void
 		 */
 		public function notice() {
+			$this->progressBarScripts ();
 			$postinstall = get_option ( 'imegateleport-settings-postinstall' );
 			if ($postinstall == 'true') {
 				$this->pluginMessage ( 'updated', 'Скопируйте ссылку <a href=' . get_site_url () . '>' . get_site_url () . '</a> в форму обмена с сайтом 1С', false, true );
 			}
-			/*
-			 * global $current_user; $id = $current_user->ID; if (isset ( $_GET [$this->mnemo] ) && $_GET [$this->mnemo] == 0) { delete_user_meta ( $id, $this->mnemo . '_postinstall' ); } else { if (get_user_meta ( $id, $this->mnemo . '_postinstall' )) { } } if (isset ( $_GET [$this->mnemo] ) && $_GET [$this->mnemo] == 1) { delete_user_meta ( $id, $this->mnemo . '_error' ); } else { $msg = get_user_meta ( $id, $this->mnemo . '_error' ); if ($msg) { $this->pluginMessage ( 'error', $msg [0], 1 ); } }
-			 */
+			if ((isset ( $_GET ['page'] ) && $_GET ['page'] == 'imegateleport_settings') || $this->progress () !== false || $this->sets ['postinstall'] == 'true' || $this->gogo) {
+				$progress = $this->progress ();
+				$this->pluginMessage ( 'updated', 'Update goods' . '<input id=iMegaExistProgress type=hidden value=' . $progress . '><div style="clear:both"></div><div id=iMegaTeleportProgressBar></div>', true, false );
+			}
+			
+			if ($this->error && $this->force === false) {
+				$this->pluginMessage ( 'error', $this->error, true, false );
+				delete_option ( 'imegateleport_progress' );
+			}
+		}
+		/**
+		 * Опции
+		 *
+		 * @return void
+		 */
+		function options() {
+			global $table_prefix;
+			$this->table_prefix = $table_prefix;
+			$this->upload_dir = wp_upload_dir ();
+			
+			if (defined ( 'IMEGATELEPORT_FORCE' ))
+				if (IMEGATELEPORT_FORCE === true) {
+					$this->force = IMEGATELEPORT_FORCE;
+				}
+			
+			$zip = get_option ( 'imegateleport-settings-zip' );
+			if ($zip == 'true') {
+				$this->zip = true;
+			}
+			if (defined ( 'IMEGATELEPORT_ZIP' ))
+				if (IMEGATELEPORT_ZIP === true) {
+					$this->zip = IMEGATELEPORT_ZIP;
+				}
+			if (class_exists ( 'ZipArchive' ) && $this->zip === true) {
+				$this->zip = true;
+			} else {
+				$this->zip = false;
+			}
+			$this->log ( '==OPTIONS==' );
+			$this->log ( '    FORCE = ' . $this->force );
+			$this->log ( '    ZIP = ' . $this->zip );
 		}
 		/**
 		 * Возвращает запрошенный путь
@@ -921,11 +977,12 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return int
 		 */
 		function progress($value = null) {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			if (! isset ( $value )) {
 				$value = get_option ( 'imegateleport_progress' );
+				$this->log ( '    PROGRESS = ' . $value );
 				if ($value == 100) {
 					delete_option ( 'imegateleport_progress' );
 				}
@@ -940,17 +997,9 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return string
 		 */
 		function progressAjaxScript() {
-			if ($this->error) {
-				return;
-			}
-			add_action ( 'admin_init', array (
-					$this,
-					'progressBarScripts' 
-			) );
-			add_action ( 'admin_menu', array (
-					$this,
-					'progressBarShow' 
-			) );
+			/*
+			 * if ($this->error && $this->force === false) { return; } add_action ( 'admin_init', array ( $this, 'progressBarScripts' ) ); add_action ( 'admin_menu', array ( $this, 'progressBarShow' ) );
+			 */
 		}
 		function progressBarScripts() {
 			wp_enqueue_style ( 'jquery-ui-style-css', 'http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/themes/smoothness/jquery-ui.css?ver=3.8' );
@@ -969,7 +1018,13 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return bool
 		 */
 		function routers($ajax = false) {
-			if ($this->error) {
+			$this->log ( '==GET==' );
+			$this->log ( $_GET );
+			$this->log ( '==POST==' );
+			$this->log ( $_POST );
+			$this->log ( '==SERVER==' );
+			$this->log ( $_SERVER );
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			$result = false;
@@ -977,10 +1032,12 @@ if (! class_exists ( 'iMegaTeleport' )) {
 			 * Проверка прогресса
 			 */
 			if ($ajax && isset ( $_POST ['action'] )) {
-				
+				$this->log ( '==AJAX==' );
 				switch ($_POST ['action']) {
 					case 'imega_teleport' :
-						echo $this->progress ();
+						$progress = $this->progress ();
+						echo $progress;
+						$this->log ( "==PROGRESS = $progress" );
 						exit ();
 						break;
 					case 'imegateleport-settings' :
@@ -992,9 +1049,11 @@ if (! class_exists ( 'iMegaTeleport' )) {
 			/*
 			 * Проверка обращения клиента 1с
 			 */
-			$agent = strstr ( $_SERVER ['HTTP_USER_AGENT'], '/', true );
+			$agent = '';
+			if (isset ($_SERVER ['HTTP_USER_AGENT']))
+				$agent = strstr ( $_SERVER ['HTTP_USER_AGENT'], '/', true );
 			if (! $ajax && $agent == '1C+Enterprise' && $_GET ['type'] == 'catalog') {
-				$result = $this->transfer ();
+				return $this->transfer ();
 			}
 			/*
 			 * Проверка оффлайнового обновления
@@ -1011,13 +1070,19 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * Запуск
 		 */
 		function run() {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
+			
 			if (! $this->mysqli->multi_query ( 'SET NAMES ' . DB_CHARSET )) {
 				$this->error = $this->mysqli->connect_error;
 				return;
 			}
+			
+			/*
+			 * // TODO next version $select = $this->mysqli->query ( "SELECT @@global.max_allowed_packet" ); if (! $select) { $this->error = $this->mysqli->connect_error; return; } else { $size = $select->fetch_array(); $this->maxAllowedPacket = $size[0]; } if ($this->maxAllowedPacket > 0) { }
+			 */
+			
 			if (! $this->mysqli->multi_query ( $this->query )) {
 				$this->error = $this->mysqli->connect_error;
 				return;
@@ -1030,7 +1095,7 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @return string
 		 */
 		function runQuery() {
-			if ($this->error) {
+			if ($this->error && $this->force === false) {
 				return;
 			}
 			/*
@@ -1054,13 +1119,10 @@ if (! class_exists ( 'iMegaTeleport' )) {
 			 * 4. business logic
 			 */
 			$queryBL = $this->loadFile ( $this->filenameBL );
-			
 			$queryBL = str_replace ( '{$baseurl}', $this->path ( 'baseurl' ), $queryBL );
 			$queryBL = str_replace ( '{$imgpath}', $this->path ( $this->mnemo ), $queryBL );
-			
 			$query .= $queryBL;
 			$queryBL = '';
-			
 			$this->query = $query;
 		}
 		/**
@@ -1099,14 +1161,83 @@ if (! class_exists ( 'iMegaTeleport' )) {
 		 * @param string $destDir        	
 		 */
 		function unzip($zipFile, $destDir = false) {
-			$zip = new ZipArchive ();
-			if ($zip) {
-				$zip->open ( $zipFile );
-				$zip->extractTo ( $destDir );
-				$zip->close ();
-				return true;
+			if (class_exists ( 'ZipArchive' )) {
+				$zip = new ZipArchive ();
+				if ($zip) {
+					$open = $zip->open ( $zipFile );
+					if ($open === true) {
+						$zip->extractTo ( $destDir );
+						$zip->close ();
+					} else {
+						$this->error = '==ZIP ERROR: ' . $this->zipStatusString ( $open );
+					}
+					return true;
+				}
 			} else {
 				return false;
+			}
+		}
+		/**
+		 * There is a usefull function to get the ZipArchive status
+		 * as a human readable string
+		 *
+		 * @param int $status        	
+		 * @return string
+		 * @author Bruno Vibert <bruno.vibert@bonobox.fr>
+		 */
+		function zipStatusString($status) {
+			switch (( int ) $status) {
+				case ZipArchive::ER_OK :
+					return 'N No error';
+				case ZipArchive::ER_MULTIDISK :
+					return 'N Multi-disk zip archives not supported';
+				case ZipArchive::ER_RENAME :
+					return 'S Renaming temporary file failed';
+				case ZipArchive::ER_CLOSE :
+					return 'S Closing zip archive failed';
+				case ZipArchive::ER_SEEK :
+					return 'S Seek error';
+				case ZipArchive::ER_READ :
+					return 'S Read error';
+				case ZipArchive::ER_WRITE :
+					return 'S Write error';
+				case ZipArchive::ER_CRC :
+					return 'N CRC error';
+				case ZipArchive::ER_ZIPCLOSED :
+					return 'N Containing zip archive was closed';
+				case ZipArchive::ER_NOENT :
+					return 'N No such file';
+				case ZipArchive::ER_EXISTS :
+					return 'N File already exists';
+				case ZipArchive::ER_OPEN :
+					return 'S Can\'t open file';
+				case ZipArchive::ER_TMPOPEN :
+					return 'S Failure to create temporary file';
+				case ZipArchive::ER_ZLIB :
+					return 'Z Zlib error';
+				case ZipArchive::ER_MEMORY :
+					return 'N Malloc failure';
+				case ZipArchive::ER_CHANGED :
+					return 'N Entry has been changed';
+				case ZipArchive::ER_COMPNOTSUPP :
+					return 'N Compression method not supported';
+				case ZipArchive::ER_EOF :
+					return 'N Premature EOF';
+				case ZipArchive::ER_INVAL :
+					return 'N Invalid argument';
+				case ZipArchive::ER_NOZIP :
+					return 'N Not a zip archive';
+				case ZipArchive::ER_INTERNAL :
+					return 'N Internal error';
+				case ZipArchive::ER_INCONS :
+					return 'N Zip archive inconsistent';
+				case ZipArchive::ER_REMOVE :
+					return 'S Can\'t remove file';
+				case ZipArchive::ER_DELETED :
+					return 'N Entry has been deleted';
+				
+				default :
+					return sprintf ( 'Unknown status %s', $status );
 			}
 		}
 	}
