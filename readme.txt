@@ -77,7 +77,7 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
-= 0.2 =
+= 1.0 =
 Added IMEGATELEPORT_LOG is a PHP constant. It makes log.
 Added IMEGATELEPORT_FORCE is a PHP constant. The script to force skip errors.
 Added IMEGATELEPORT_MAX_BODY_SIZE is a PHP constant. The maximum size of an uploaded file.
