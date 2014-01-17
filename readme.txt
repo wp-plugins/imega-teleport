@@ -4,7 +4,7 @@ Donate link: http://teleport.imega.ru/donate
 Tags: 1C, import, ecommerce, e-commerce, commerce, woothemes, wordpress ecommerce, affiliate, store, sales, sell, shop, shopping, cart, checkout, configurable, variable, widgets, reports, download, downloadable, digital, inventory, stock, reports, shipping, tax
 Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=RGWW29C527HGQ
 Requires at least: 3.5
-Tested up to: 3.7
+Tested up to: 3.8
 Stable tag: 4.3
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
