@@ -2,7 +2,6 @@
 Contributors: iMega
 Donate link: http://teleport.imega.ru/donate
 Tags: 1C, import, ecommerce, e-commerce, commerce, woothemes, wordpress ecommerce, affiliate, store, sales, sell, shop, shopping, cart, checkout, configurable, variable, widgets, reports, download, downloadable, digital, inventory, stock, reports, shipping, tax
-Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=RGWW29C527HGQ
 Requires at least: 3.5
 Tested up to: 3.8
 Stable tag: 4.3
@@ -20,6 +19,7 @@ Import your products from your 1C to your new WooCommerce store.
 Import data that contain title of goods, price, properties 
 and characteristics of the goods, description and picture, 
 the amount of goods available for sale.
+Export orders and change status of orders.
 
 = На русском. =
 
@@ -36,6 +36,9 @@ iMegaTeleport выгружает данные о товаре: название,
 
 Количество товаров, которое можно выгрузить ограничено 
 возможностями сервера, на котором работает программа 1С.
+
+Обрабатывает заказы покупателей, используя статусы: 
+"В обработке", "Завершен", "Отменен".
 
 Ознакомьтесь пожалуйста с [инструкцией](http://teleport.imega.ru/instructions).
 
@@ -71,11 +74,18 @@ iMegaTeleport выгружает данные о товаре: название,
 1. Деактивируйте iMegaTeleport в панели управления блогом и снова активируйте.
 2. Выполните обмен с сайтом, но указав полную выгрузку товара. 
 
+= Что делать если 1C не загружает заказы, ругается на валюту? =
+1. Укажите валюту в 1С из классификатора ОКВ (наименование RUB, Код 643).
+2. В настройках интернет-магазина, также укажите RUB.
+
 == Screenshots ==
 
 1. Settings of a plugin.
 
 == Changelog ==
+
+= 1.1 =
+Added export orders and change status of orders.
 
 = 1.0 =
 Added IMEGATELEPORT_LOG is a PHP constant. It makes log.
