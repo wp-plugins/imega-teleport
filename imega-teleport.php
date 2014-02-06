@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.1
+ * Version: 1.2
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -123,7 +123,11 @@ if (! class_exists('iMegaTeleport')) {
      */
     class iMegaTeleport
     {
-
+        
+        const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
+              ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
+              ER_MYSQL_ACCESS = 'Проверьте доступ к БД. Требуются права к CREATE, DELETE, DROP, INSERT, SELECT, UPDATE.';
+        
         protected $error = false;
 
         protected $fileQueryCustomer = 'order-customer.sql';
@@ -153,7 +157,7 @@ if (! class_exists('iMegaTeleport')) {
         protected $force = false;
 
         protected $gogo = false;
-
+        
         protected $name = 'iMega Teleport';
 
         protected $maxAllowedPacket = 0;
@@ -161,6 +165,8 @@ if (! class_exists('iMegaTeleport')) {
         protected $mnemo = 'imegateleport';
 
         protected $mysqli = null;
+        
+        protected $mysqlnd = false;
 
         protected $query;
 
@@ -191,9 +197,13 @@ if (! class_exists('iMegaTeleport')) {
             $this->routers(true);
             $this->hooks();
             /*
-             * Проверка установленного woocommerce
+             * Поддерживаемые магазины
              */
-            $this->existsBusinessLogic('woocommerce');
+            $supportShops = array('Viper 1.0.0 Fabthemes');
+            /*
+             * Проверка установленного магазина
+             */
+            $this->existsBusinessLogic($supportShops);
             /*
              * Проверка соединения с БД
              */
@@ -298,10 +308,6 @@ if (! class_exists('iMegaTeleport')) {
             if ($this->error && $this->force === false) {
                 return;
             }
-            if (! class_exists('mysqli')) {
-                $this->error = 'Включите поддержку Mysqli.';
-                return;
-            }
             $this->mysqli = new mysqli(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME);
             if ($this->mysqli->connect_errno) {
                 $this->error = $this->mysqli->connect_error;
@@ -311,8 +317,17 @@ if (! class_exists('iMegaTeleport')) {
                 $this->error = $this->mysqli->connect_error;
                 return;
             }
-            
-            $rows = $res->fetch_all();
+            if ($this->mysqlnd) {
+                $rows = $res->fetch_all();
+                $grants = $rows[1][0];
+            } else {
+                $rows = array();
+                while($row = $res->fetch_assoc()) {
+                    $rows[] = $row;
+                }
+                $values = array_values($rows[1]);
+                $grants = $values[0];
+            }
             $needGrants = array(
                 'all privileges',
                 'create,',
@@ -321,12 +336,11 @@ if (! class_exists('iMegaTeleport')) {
                 'insert',
                 'select',
                 'update');
-            $grants = $rows[1][0];
             
             foreach ($needGrants as $grant) {
                 $pos = strripos($grants, $grant);
                 if ($pos === false) {
-                    $this->error = 'Проверьте доступ к БД. Требуются права к CREATE, DELETE, DROP, INSERT, SELECT, UPDATE.';
+                    $this->error = self::ER_MYSQL_ACCESS;
                     if ($grant == 'all privileges')
                         $this->error = '';
                 } else {
@@ -353,7 +367,7 @@ if (! class_exists('iMegaTeleport')) {
                 $slug = $this->translit($name);
                 $name = $this->escape_string($name);
                 
-                $query .= "('{$id}','{$parent}','{$name}','{$slug}'),\n";
+                $query .= "('{$id}','{$parent}','{$name}','{$slug}'),";
                 
                 if ($group->{GROUPS}->{GROUP})
                     $this->createGroups($query, $group->{GROUPS}->{GROUP}, $id);
@@ -511,14 +525,16 @@ if (! class_exists('iMegaTeleport')) {
                     break;
                 
                 case "import":
-                    $this->progress(14);
                     $filename = $this->temp();
                     if (! empty($filename) && $this->zip === true) {
                         $listOfFiles = array();
                         if ($this->unzip($filename, $listOfFiles, dirname($filename) . '/'))
                             unlink($filename);
                     }
-                    $result = true;
+                    if ($_GET['filename'] == 'offers.xml') {
+                        $this->progress(14);
+                        $result = true;
+                    }
                     echo "success\n";
                     $this->temp('', true);
                     break;
@@ -561,28 +577,48 @@ if (! class_exists('iMegaTeleport')) {
          * - ecommerce
          * - eshop
          *
-         * @param string $name            
+         * @param array $name            
          * @return bool
          */
-        private function existsBusinessLogic ($name)
+        private function existsBusinessLogic ($names)
         {
+            $woo = 'woocommerce';
             if ($this->error && $this->force === false) {
                 return;
             }
+            
             $isInstall = false;
-            $plugins = get_option('active_plugins');
-            foreach ($plugins as $key => $value) {
-                if (strpos($value, $name . '.php') !== false) {
-                    $isInstall = true;
-                    break;
+            
+            $theme = wp_get_theme();
+            $nameTheme = $theme->get( 'Name' );
+            $strTheme = $nameTheme;
+            $strTheme .= ' ' . $theme->get( 'Version' );
+            $strTheme .= ' ' . $theme->get( 'Author');
+            $key = array_search($strTheme, $names);
+            if ($key !== false) {
+                $this->filenameBL = mb_strtolower($nameTheme).'.sql';
+                $isInstall = true;
+            } else {
+                $plugins = get_option('active_plugins');
+                foreach ($plugins as $key => $value) {
+                    if (strpos($value, $woo . '.php') !== false) {
+                        $this->filenameBL = $woo.'.sql';
+                        $isInstall = true;
+                        break;
+                    }
                 }
             }
             if (! $isInstall) {
-                $message = __('Not yet') . ' ' . __('Plugin') . ' ' . $name .
+                $message = __('Not yet') . ' ' . __('Themes') . ':<br>';
+                foreach ($names as $name) {
+                    $message .= $name . '<br>';
+                }
+                $message .= '<br>'.__('Not yet') . ' ' . __('Plugin') . ' ' . $woo .
                          ' :(';
                 $this->error = $message;
                 return;
             }
+            
             return $isInstall;
         }
 
@@ -1059,7 +1095,7 @@ if (! class_exists('iMegaTeleport')) {
             /*
              * Выбрать все документы Пересобрать товары в документе
              */
-            $docs = array(); // 4745, 4749, 4750
+            $docs = array();
             $items = array();
             
             foreach ($itemsRows as $item) {
@@ -1163,9 +1199,11 @@ if (! class_exists('iMegaTeleport')) {
             $xml = pack('CCC', 0xef, 0xbb, 0xbf) . $order->asXML();
             $zipFile = false;
             if ($this->zip) {
-                // TODO Раскоментировать Когда 1С переделает обработку zip
-                // файлов
-                // $zipFile = $this->xmlToZip($xml);
+                /*
+                 * TODO Раскоментировать Когда 1С переделает обработку zip
+                 * файлов
+                 * $zipFile = $this->xmlToZip($xml);
+                 */
             }
             if (! $zipFile) {
                 header("Content-type: text/xml; charset=utf-8");
@@ -1263,6 +1301,13 @@ if (! class_exists('iMegaTeleport')) {
             } else {
                 $this->zip = false;
             }
+            if (! function_exists('mb_strtolower'))
+                $this->error = self::ER_MBSTRING;
+            if (! class_exists('mysqli'))
+                $this->error = self::ER_MYSQLI;
+            $mysqlnd = function_exists('mysqli_fetch_all');
+            if ($mysqlnd)
+                $this->mysqlnd = true;
             $this->log('==OPTIONS==');
             $this->log('    FORCE = ' . $this->force);
             $this->log('    ZIP = ' . $this->zip);
@@ -1313,7 +1358,8 @@ if (! class_exists('iMegaTeleport')) {
          */
         public function pluginDeactivation ()
         {
-            $this->query = $this->loadFile($this->filenameClear);
+            $this->query = $this->loadFile('clear-'.$this->filenameBL);
+            $this->query .= $this->loadFile($this->filenameClear);
             $this->query .= $this->loadFile($this->filenameDeactivate);
             $this->run();
         }
@@ -1444,17 +1490,6 @@ if (! class_exists('iMegaTeleport')) {
             wp_enqueue_script('iMegaTeleportProgressBar');
         }
 
-        function progressBarShow ()
-        {
-            $progress = $this->progress();
-            $this->pluginMessage('updated', 
-                    'Update goods' .
-                             '<input id=iMegaExistProgress type=hidden value=' .
-                             $progress .
-                             '><div style="clear:both"></div><div id=iMegaTeleportProgressBar></div>', 
-                            true, false);
-        }
-
         /**
          * Маршруты
          *
@@ -1511,26 +1546,31 @@ if (! class_exists('iMegaTeleport')) {
                     $agent = substr($_SERVER['HTTP_USER_AGENT'], 0, $pos);
                 }
             }
-            
             if (! $ajax && $agent == '1C+Enterprise')
                 if ($_GET['type'] == 'catalog')
                     return $this->transfer();
-            
+
             if (! $ajax && $agent == '1C+Enterprise')
                 if ($_GET['type'] == 'sale') {
                     $this->transfer();
+                    return;
                 }
                 
-                /*
+            /*
              * Проверка оффлайнового обновления
              */
             if (! $ajax && isset($_POST['action'])) {
                 if ($_POST['action'] == 'imegagogo') {
                     $this->progress(15);
-                    $result = true;
+                    return true;
                 }
             }
-            return $result;
+            if ($ajax && $agent == '1C+Enterprise' && $this->progress() > 0) {
+                header("HTTP/1.0 404 Not Found");
+                echo "\n\nСообщение от iMegaTeleport: Еще не завершен процесс обновления.\n";
+                echo "== Что делать если индикатор процесса завис? ==\n1. Деактивируйте iMegaTeleport в панели управления блогом и снова активируйте.\n2. Выполните обмен с сайтом, но указав полную выгрузку товара.\n\n";
+                exit();
+            }
         }
 
         /**
@@ -1591,6 +1631,7 @@ if (! class_exists('iMegaTeleport')) {
             /*
              * 4. business logic
              */
+            $this->log('==BUSINESS LOGIC = '.$this->filenameBL);
             $queryBL = $this->loadFile($this->filenameBL);
             $queryBL = str_replace('{$baseurl}', $this->path('baseurl'), 
                     $queryBL);
