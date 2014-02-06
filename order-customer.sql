@@ -1,0 +1,1 @@
+select * from {$table_prefix}postmeta where post_id in (select p.id from {$table_prefix}posts p where p.post_type = 'shop_order');
