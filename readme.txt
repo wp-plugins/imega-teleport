@@ -88,6 +88,9 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.3 =
+Fix bug 50%.
+
 = 1.2 =
 Added support the Viper by Fabthemes. Viper is a free directory WordPress theme.
 

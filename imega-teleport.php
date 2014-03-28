@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.2
+ * Version: 1.3
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -804,15 +804,14 @@ if (! class_exists('iMegaTeleport')) {
             }
             
             if (is_object($import->{CLASSI}->{GROUPS}->{GROUP})) {
-                $query .= "INSERT INTO {$this->table_prefix}imega_groups (guid, parent, title, slug) VALUES\n";
-                $this->createGroups($query, 
-                        $import->{CLASSI}->{GROUPS}->{GROUP});
-                $query = substr($query, 0, - 2) . ";\n";
+                $query .= "INSERT INTO {$this->table_prefix}imega_groups (guid, parent, title, slug) VALUES";
+                $this->createGroups($query, $import->{CLASSI}->{GROUPS}->{GROUP});
+                $query = mb_substr($query, 0, -1) . ";";
             }
             
             if (is_object($import->{CLASSI}->{PROPERTIES}->{PROPERY})) {
                 
-                $query .= "INSERT INTO {$this->table_prefix}imega_prop (guid, title, slug, val_type, parent_guid) VALUES \n";
+                $query .= "INSERT INTO {$this->table_prefix}imega_prop (guid, title, slug, val_type, parent_guid) VALUES";
                 
                 foreach ($import->{CLASSI}->{PROPERTIES}->{PROPERY} as $propery) {
                     $id = (string) $propery->{ID};
@@ -826,7 +825,7 @@ if (! class_exists('iMegaTeleport')) {
                     $slug = $this->translit($name);
                     $name = $this->escape_string($name);
                     
-                    $query .= "('{$id}','{$name}','{$slug}','{$valueType}',NULL),\n";
+                    $query .= "('{$id}','{$name}','{$slug}','{$valueType}',NULL),";
                     
                     if ($propery->{ATTRIBUTESVARIANTS})
                         foreach ($propery->{ATTRIBUTESVARIANTS}->{DIC} as $cat) {
@@ -834,16 +833,16 @@ if (! class_exists('iMegaTeleport')) {
                             $cat_value = (string) $cat->{VALUE};
                             $cat_value_slug = $this->translit($cat_value);
                             $cat_value = $this->escape_string($cat_value);
-                            $query .= "('{$cat_valueid}','{$cat_value}','{$cat_value_slug}',NULL,'{$id}'),\n";
+                            $query .= "('{$cat_valueid}','{$cat_value}','{$cat_value_slug}',NULL,'{$id}'),";
                         }
                 }
-                $query = substr($query, 0, - 2) . ";\n";
+                $query = mb_substr($query, 0, -1) . ";";
             }
             
             if (is_object($catalog->{PRODUCTS}->{PRODUCT})) {
                 
-                $query .= "INSERT INTO {$this->table_prefix}imega_prod (title, descr, guid, slug, catalog_guid, article, img, img_prop) VALUES \n";
-                $query_misc = "INSERT INTO {$this->table_prefix}imega_misc (type, guid, label, val, labelSlug, countAttr, valSlug, _visible) VALUES \n";
+                $query .= "INSERT INTO {$this->table_prefix}imega_prod (title, descr, guid, slug, catalog_guid, article, img, img_prop) VALUES";
+                $query_misc = "INSERT INTO {$this->table_prefix}imega_misc (type, guid, label, val, labelSlug, countAttr, valSlug, _visible) VALUES";
                 
                 foreach ($catalog->{PRODUCTS}->{PRODUCT} as $product) {
                     
@@ -867,11 +866,11 @@ if (! class_exists('iMegaTeleport')) {
                     $name = $this->escape_string($name);
                     $article = $this->escape_string($product->{ARTICLE});
                     
-                    $query .= "('{$name}','{$desc}','{$id}','{$slug}','{$catalog_id}','{$article}','{$img}','{$img_prop}'),\n";
+                    $query .= "('{$name}','{$desc}','{$id}','{$slug}','{$catalog_id}','{$article}','{$img}','{$img_prop}'),";
                     
                     foreach ($product->{GROUPS} as $group) {
                         $group_id = (string) $group->{ID};
-                        $query_misc .= "('group','{$id}','{$group_id}',NULL,NULL,NULL,NULL,0),\n";
+                        $query_misc .= "('group','{$id}','{$group_id}',NULL,NULL,NULL,NULL,0),";
                     }
                     
                     if ($product->{PROPERTYVALUES})
@@ -883,7 +882,7 @@ if (! class_exists('iMegaTeleport')) {
                             $property_value = $this->escape_string(
                                     $property_value);
                             if (! empty($property_value))
-                                $query_misc .= "('prop','{$id}','{$propery_id}','{$property_value}',NULL,NULL,'{$property_value_slug}',0),\n";
+                                $query_misc .= "('prop','{$id}','{$propery_id}','{$property_value}',NULL,NULL,'{$property_value_slug}',0),";
                         }
                     
                     $countAttr = count(
@@ -901,13 +900,13 @@ if (! class_exists('iMegaTeleport')) {
                             if ($this->sets['kod'] == 'true' &&
                                      $attr_name_slug == 'kod')
                                 $visible = 1;
-                            $query_misc .= "('attr','{$id}','{$attr_name}','{$attr_value}','{$attr_name_slug}',$countAttr,'{$attr_valueSlug}', $visible),\n";
+                            $query_misc .= "('attr','{$id}','{$attr_name}','{$attr_value}','{$attr_name_slug}',$countAttr,'{$attr_valueSlug}',$visible),";
                         }
                     }
                 }
                 
-                $query = substr($query, 0, - 2) . ";\n";
-                $query_misc = substr($query_misc, 0, - 2) . ";\n";
+                $query = mb_substr($query, 0, -1) . ";";
+                $query_misc = mb_substr($query_misc, 0, -1) . ";";
             }
             $this->progress(25);
             return $query . $query_misc;
@@ -942,9 +941,9 @@ if (! class_exists('iMegaTeleport')) {
             $query3 = '';
             
             if (is_object($packageoffers->{OFFERS}->{OFFER})) {
-                $query1 .= "INSERT INTO {$this->table_prefix}imega_offers(guid, prod_guid, barcode, title, base_unit, base_unit_key, base_unit_title, base_unit_int, amount, postType) VALUES \n";
-                $query2 .= "INSERT INTO {$this->table_prefix}imega_offers_features(offer_guid, prodGuid, variantGuid, title, val, titleSlug, valSlug) VALUES \n";
-                $query3 .= "INSERT INTO {$this->table_prefix}imega_offers_prices(offer_guid, title, price, currency, unit, ratio, type_guid) VALUES \n";
+                $query1 .= "INSERT INTO {$this->table_prefix}imega_offers(guid, prod_guid, barcode, title, base_unit, base_unit_key, base_unit_title, base_unit_int, amount, postType)VALUES";
+                $query2 .= "INSERT INTO {$this->table_prefix}imega_offers_features(offer_guid, prodGuid, variantGuid, title, val, titleSlug, valSlug)VALUES";
+                $query3 .= "INSERT INTO {$this->table_prefix}imega_offers_prices(offer_guid, title, price, currency, unit, ratio, type_guid)VALUES";
                 foreach ($packageoffers->{OFFERS}->{OFFER} as $offer) {
                     
                     $id = (string) $offer->{ID};
@@ -973,7 +972,7 @@ if (! class_exists('iMegaTeleport')) {
                             $future_title = $this->escape_string($future_title);
                             $future_value = $this->escape_string($future_value);
                             $doubleGuid = explode('#', $id);
-                            $query2 .= "('{$id}', '{$doubleGuid[0]}','{$doubleGuid[1]}','{$future_title}','{$future_value}','{$future_title_slug}','{$future_value_slug}'),\n";
+                            $query2 .= "('{$id}', '{$doubleGuid[0]}','{$doubleGuid[1]}','{$future_title}','{$future_value}','{$future_title_slug}','{$future_value_slug}'),";
                         }
                     } else {
                         $postType = '';
@@ -990,15 +989,15 @@ if (! class_exists('iMegaTeleport')) {
                                     $price->{CURRENCY});
                             $price_unit = $this->escape_string($price->{UNIT});
                             $price_ratio = $this->escape_string($price->{RATIO});
-                            $query3 .= "('{$id}','{$price_pred}',{$price_byunit},'{$price_cur}','{$price_unit}','{$price_ratio}','{$price_typeid}'),\n";
+                            $query3 .= "('{$id}','{$price_pred}',{$price_byunit},'{$price_cur}','{$price_unit}','{$price_ratio}','{$price_typeid}'),";
                         }
                     
-                    $query1 .= "('{$id}','{$prod_guid}','{$barcode}','{$name}','{$base_unit}','{$base_unit_key}','{$base_unit_title}','{$base_unit_int}',$amount,'{$postType}'),\n";
+                    $query1 .= "('{$id}','{$prod_guid}','{$barcode}','{$name}','{$base_unit}','{$base_unit_key}','{$base_unit_title}','{$base_unit_int}',$amount,'{$postType}'),";
                 }
                 
-                $query1 = substr($query1, 0, - 2) . ";";
-                $query2 = substr($query2, 0, - 2) . ";";
-                $query3 = substr($query3, 0, - 2) . ";";
+                $query1 = mb_substr($query1, 0, -1) . ";";
+                $query2 = mb_substr($query2, 0, -1) . ";";
+                $query3 = mb_substr($query3, 0, -1) . ";";
                 
                 $query = $query . $query1 . $query2 . $query3;
             }
@@ -1624,7 +1623,7 @@ if (! class_exists('iMegaTeleport')) {
              */
             if ($this->sets['fullname'] == 'true')
                 $query .= $this->loadFile($this->filenameFullname);
-                /*
+            /*
              * 3. load offers xml
              */
             $query .= $this->loadOffers();
