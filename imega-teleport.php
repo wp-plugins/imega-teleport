@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.3
+ * Version: 1.4
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -312,6 +312,11 @@ if (! class_exists('iMegaTeleport')) {
             if ($this->mysqli->connect_errno) {
                 $this->error = $this->mysqli->connect_error;
             }
+            
+            if (defined('IMEGATELEPORT_IGNORE_ACCESS') && (IMEGATELEPORT_IGNORE_ACCESS)) {
+                return;
+            }
+            
             $res = $this->mysqli->query('show grants');
             if (! $res) {
                 $this->error = $this->mysqli->connect_error;
@@ -328,8 +333,9 @@ if (! class_exists('iMegaTeleport')) {
                 $values = array_values($rows[1]);
                 $grants = $values[0];
             }
+
             $needGrants = array(
-                'all privileges',
+                'all',
                 'create,',
                 'delete',
                 'drop',
@@ -341,10 +347,10 @@ if (! class_exists('iMegaTeleport')) {
                 $pos = strripos($grants, $grant);
                 if ($pos === false) {
                     $this->error = self::ER_MYSQL_ACCESS;
-                    if ($grant == 'all privileges')
+                    if ($grant == 'all')
                         $this->error = '';
                 } else {
-                    if ($grant == 'all privileges')
+                    if ($grant == 'all')
                         break;
                 }
             }
@@ -942,7 +948,6 @@ if (! class_exists('iMegaTeleport')) {
             
             if (is_object($packageoffers->{OFFERS}->{OFFER})) {
                 $query1 .= "INSERT INTO {$this->table_prefix}imega_offers(guid, prod_guid, barcode, title, base_unit, base_unit_key, base_unit_title, base_unit_int, amount, postType)VALUES";
-                $query2 .= "INSERT INTO {$this->table_prefix}imega_offers_features(offer_guid, prodGuid, variantGuid, title, val, titleSlug, valSlug)VALUES";
                 $query3 .= "INSERT INTO {$this->table_prefix}imega_offers_prices(offer_guid, title, price, currency, unit, ratio, type_guid)VALUES";
                 foreach ($packageoffers->{OFFERS}->{OFFER} as $offer) {
                     
@@ -962,6 +967,7 @@ if (! class_exists('iMegaTeleport')) {
                     $base_unit_title = $this->escape_string($base_unit_title);
                     
                     if ($offer->{PRODUCTFUTURES}) {
+                        $query2 .= "INSERT INTO {$this->table_prefix}imega_offers_features(offer_guid, prodGuid, variantGuid, title, val, titleSlug, valSlug)VALUES";
                         foreach ($offer->{PRODUCTFUTURES}->{PRODUCTFUTURE} as $future) {
                             $future_title = (string) $future->{NAME};
                             $future_value = (string) $future->{VALUE};
@@ -974,6 +980,7 @@ if (! class_exists('iMegaTeleport')) {
                             $doubleGuid = explode('#', $id);
                             $query2 .= "('{$id}', '{$doubleGuid[0]}','{$doubleGuid[1]}','{$future_title}','{$future_value}','{$future_title_slug}','{$future_value_slug}'),";
                         }
+                        $query2 = mb_substr($query2, 0, -1) . ";";
                     } else {
                         $postType = '';
                     }
@@ -994,11 +1001,8 @@ if (! class_exists('iMegaTeleport')) {
                     
                     $query1 .= "('{$id}','{$prod_guid}','{$barcode}','{$name}','{$base_unit}','{$base_unit_key}','{$base_unit_title}','{$base_unit_int}',$amount,'{$postType}'),";
                 }
-                
                 $query1 = mb_substr($query1, 0, -1) . ";";
-                $query2 = mb_substr($query2, 0, -1) . ";";
                 $query3 = mb_substr($query3, 0, -1) . ";";
-                
                 $query = $query . $query1 . $query2 . $query3;
             }
             $this->progress(50);
@@ -1593,7 +1597,8 @@ if (! class_exists('iMegaTeleport')) {
              * $select->fetch_array(); $this->maxAllowedPacket = $size[0]; } if
              * ($this->maxAllowedPacket > 0) { }
              */
-            if (! $this->mysqli->multi_query($this->query)) {
+            $this->log("==Mysql result==");
+            if ($this->mysqli->multi_query($this->query)) {
                 $this->error = $this->mysqli->connect_error;
                 return;
             }

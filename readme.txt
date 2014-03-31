@@ -3,7 +3,7 @@ Contributors: iMega
 Donate link: http://teleport.imega.ru/donate
 Tags: 1C, import, viper, , ecommerce, e-commerce, commerce, woothemes, wordpress ecommerce, affiliate, store, sales, sell, shop, shopping, cart, checkout, configurable, variable, widgets, reports, download, downloadable, digital, inventory, stock, reports, shipping, tax
 Requires at least: 3.5
-Tested up to: 3.8
+Tested up to: 3.8.1
 Stable tag: 4.3
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -87,6 +87,10 @@ iMegaTeleport выгружает данные о товаре: название,
 1. Settings of a plugin.
 
 == Changelog ==
+
+= 1.4 =
+Fix bug depencies table posts.post_title and post_context not null.
+Added IMEGATELEPORT_IGNORE_ACCESS is a PHP constant. The script don't access to mysql.
 
 = 1.3 =
 Fix bug 50%.
