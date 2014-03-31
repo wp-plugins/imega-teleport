@@ -89,8 +89,8 @@ iMegaTeleport выгружает данные о товаре: название,
 == Changelog ==
 
 = 1.4 =
-Fix bug depencies table posts.post_title and post_context not null.
-Added IMEGATELEPORT_IGNORE_ACCESS is a PHP constant. The script don't access to mysql.
+Fix bug to dependen fields of table posts.post_title and post_context not null.
+Added IMEGATELEPORT_IGNORE_ACCESS is a PHP constant. The script doesn't control access to mysql.﻿
 
 = 1.3 =
 Fix bug 50%.
