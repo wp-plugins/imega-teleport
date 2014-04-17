@@ -80,7 +80,16 @@ function iMegaTeleportGetProgress() {
 	jQuery.post(ajaxurl, data, function(response) {
 		iMegaInteval = setInterval(
 			function(){
-				var $value = response*1;
+				if (response.length <= 3) {
+					var $value = response*1;
+				} else {
+					clearInterval(iMegaProgress);
+					jQuery('#iMegaExistProgress').val(0);
+					jQuery('#iMegaProgress').attr('class', 'error');
+					jQuery('#iMegaTeleportProgressMsg').html(response);
+					var $value = 0;
+				}
+
 				iMegaAnimateProgress($value);
 				if ($value >= 100) {
 					if (typeof iMegaInteval === "undefined") {

@@ -3,7 +3,7 @@ Contributors: iMega
 Donate link: http://teleport.imega.ru/donate
 Tags: 1C, import, viper, , ecommerce, e-commerce, commerce, woothemes, wordpress ecommerce, affiliate, store, sales, sell, shop, shopping, cart, checkout, configurable, variable, widgets, reports, download, downloadable, digital, inventory, stock, reports, shipping, tax
 Requires at least: 3.5
-Tested up to: 3.8.1
+Tested up to: 3.9
 Stable tag: 4.3
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -82,11 +82,22 @@ iMegaTeleport выгружает данные о товаре: название,
 1. Укажите валюту в 1С из классификатора ОКВ (наименование RUB, Код 643).
 2. В настройках интернет-магазина, также укажите RUB.
 
+= ErrorNo:2, mysqli::mysqli() [mysqli.mysqli]: (HY000/2002): Connection refused =
+1. Укажите iMegaTeleport IP-адрес сервера MySQL define('IMEGATELEPORT_HOST', '255.255.255.255'); в wp-config.php
+
 == Screenshots ==
 
 1. Settings of a plugin.
 
 == Changelog ==
+
+= 1.5 =
+Added IMEGATELEPORT_HOST is a PHP constant. The host MySQL. Can be either a host name or an IP address. 
+Added IMEGATELEPORT_PORT is a PHP constant. Specifies the port number to attempt to connect to the MySQL server.
+Added IMEGATELEPORT_SOCKET is a PHP constant. Specifies the socket or named pipe that should be used.
+Added IMEGATELEPORT_USER is a PHP constant. The user MySQL.
+Added IMEGATELEPORT_PASSWORD is a PHP constant. The pass.
+Fix display errors
 
 = 1.4 =
 Fix bug to dependen fields of table posts.post_title and post_context not null.
