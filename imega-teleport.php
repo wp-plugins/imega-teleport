@@ -1232,7 +1232,7 @@ if (! class_exists('iMegaTeleport')) {
         function orders ()
         {
             $this->log('==ORDERS==');
-            $file = dirname(__FILE__) . '/' . $this->filenameOrder;
+            $file = $this->path('basedir') . $this->path($this->mnemo) . $this->filenameOrder;
             try {
                 $order = new SimpleXMLElement($file, 0, true);
             } catch (Exception $e) {
