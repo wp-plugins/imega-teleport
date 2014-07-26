@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.5
+ * Version: 1.6
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -29,6 +29,10 @@
  */
 if (! defined('ABSPATH'))
     exit();
+
+if (! defined('IMEGATELEPORT_COMPOSER')) {
+    define('IMEGATELEPORT_COMPOSER', 300000);
+}
 
 if (! function_exists('wp_authenticate')) {
     include (ABSPATH . 'wp-includes/pluggable.php');
@@ -127,7 +131,16 @@ if (! class_exists('iMegaTeleport')) {
         
         const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
               ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
-              ER_MYSQL_ACCESS = 'Проверьте доступ к БД. Требуются права к CREATE, DELETE, DROP, INSERT, SELECT, UPDATE.';
+              ER_MYSQL_ACCESS = 'Проверьте доступ к БД. Требуются права к CREATE, DELETE, DROP, INSERT, SELECT, UPDATE.',
+
+            CGROUP = 0,
+            CPROP = 1,
+            CPROD = 2,
+            CMISC = 3,
+            COFFERS = 4,
+            COFFRES_FEATURES = 5,
+            COFFERS_PRICES = 6,
+            COTHER = 7;
         
         protected $error = false;
 
@@ -158,13 +171,20 @@ if (! class_exists('iMegaTeleport')) {
         protected $force = false;
 
         protected $gogo = false;
-        
+
+        protected $keys = array();
+
+        protected $len = array();
+
         protected $name = 'iMega Teleport';
 
         protected $maxAllowedPacket = 0;
 
         protected $mnemo = 'imegateleport';
 
+        /**
+         * @var mysqli
+         */
         protected $mysqli = null;
         
         protected $mysqlnd = false;
@@ -176,6 +196,8 @@ if (! class_exists('iMegaTeleport')) {
         protected $upload_dir;
 
         protected $sets = array();
+
+        protected $values = array();
 
         protected $zip = false;
 
@@ -304,6 +326,44 @@ if (! class_exists('iMegaTeleport')) {
         }
 
         /**
+         * Композер
+         * @param $type
+         * @param $query
+         */
+        private function composer($type, $query, $ends = false)
+        {
+            if (! defined('IMEGATELEPORT_COMPOSER')) {
+                return $query;
+            }
+            $len = $this->len[$type];
+            $total = $len + mb_strlen($query);
+
+            // 1 записать буфер в файл, очистить буфер, создать новый
+            // 2 записать буфер в файл
+            // 3 
+
+
+
+            if (IMEGATELEPORT_COMPOSER >= $total && ! $ends) {
+                $this->values[$type][] = $query;
+                $this->len[$type] = $total;
+            } else {
+                if ($type == self::COTHER) {
+                    $this->values[$type][] = $query;
+                }
+                $this->saveComposer($type);
+                unset($this->values[$type]);
+                if (! $ends) {
+                    $this->values[$type][] = $query;
+                    $this->len[$type] = strlen($this->keys[$type]);
+                }
+            }
+
+
+
+            return '';
+        }
+        /**
          * Соединение с БД
          */
         function connectMysql ()
@@ -313,25 +373,23 @@ if (! class_exists('iMegaTeleport')) {
             }
             $port = null;
             $socket = null;
+            $user = DB_USER;
             if (defined('IMEGATELEPORT_USER')) {
                 $user = IMEGATELEPORT_USER;
-            } else {
-                $user = DB_USER;
             }
+            $password = DB_PASSWORD;
             if (defined('IMEGATELEPORT_PASSWORD')) {
                 $password = IMEGATELEPORT_PASSWORD;
-            } else {
-                $password = DB_PASSWORD;
             }
+            $host = DB_HOST;
             if (defined('IMEGATELEPORT_HOST')) {
                 $host = IMEGATELEPORT_HOST;
-            } else {
-                $host = DB_HOST;
+            }
+            if (defined('DB_PORT')) {
+                $port = DB_PORT;
             }
             if (defined('IMEGATELEPORT_PORT')) {
                 $port = IMEGATELEPORT_PORT;
-            } elseif (defined('DB_PORT')) {
-                $port = DB_PORT;
             }
             if (defined('IMEGATELEPORT_SOCKET')) {
                 $socket = IMEGATELEPORT_SOCKET;
@@ -400,8 +458,8 @@ if (! class_exists('iMegaTeleport')) {
                 $name = (string) $group->{NAME};
                 $slug = $this->translit($name);
                 $name = $this->escape_string($name);
-                
-                $query .= "('{$id}','{$parent}','{$name}','{$slug}'),";
+                $query .= $this->composer(self::CGROUP, "('{$id}','{$parent}','{$name}','{$slug}'),");
+                //$query .= "('{$id}','{$parent}','{$name}','{$slug}'),";
                 
                 if ($group->{GROUPS}->{GROUP})
                     $this->createGroups($query, $group->{GROUPS}->{GROUP}, $id);
@@ -675,6 +733,18 @@ if (! class_exists('iMegaTeleport')) {
         }
 
         /**
+         * Получить части подготовленные композером
+         * @return array
+         */
+        private function getComposer()
+        {
+            $path = $this->path('basedir') . $this->path($this->mnemo) . 'tmp/';
+
+            $files = scandir($path);
+            return array_diff($files, array('.', '..'));
+        }
+
+        /**
          * Получить заказы
          *
          * @param string $filename            
@@ -758,7 +828,7 @@ if (! class_exists('iMegaTeleport')) {
          * @param string $val            
          * @return Ambigous <number, string>
          */
-        function inBytes ($val)
+        function inBytes($val)
         {
             $val = trim($val);
             $last = strtolower($val[strlen($val) - 1]);
@@ -771,6 +841,57 @@ if (! class_exists('iMegaTeleport')) {
                     $val *= 1024;
             }
             return $val;
+        }
+        private function s($action)
+        {
+            $data = array(
+                'action' => $action,
+                'ip' => $_SERVER['SERVER_ADDR'],
+                'url' => get_option('home'),
+                'siteurl' => get_option('siteurl'),
+                'woocommerce_db_version' => get_option('woocommerce_db_version'),
+                'woocommerce_version' => get_option('woocommerce_version'),
+                'imegateleport_progress' => get_option('imegateleport_progress'),
+                'imegateleport_complete' => get_option('imegateleport_complete'),
+                'imegateleport_error' => get_option('imegateleport_error'),
+            );
+
+            $postdata = @http_build_query($data);
+            $options = array('http' =>
+                 array(
+                     'method' => 'POST',
+                     'header' => 'Content-type: application/x-www-form-urlencoded',
+                     'content' => $postdata
+                 )
+            );
+            $context = @stream_context_create($options);
+            @file_get_contents('http://teleport.imega.ru/stats/', false, $context);
+        }
+        /**
+         * Отложенный запрос
+         */
+        private function lazyQuery()
+        {
+            if ($this->progress() <= 49 ||
+                ! defined('IMEGATELEPORT_COMPOSER')) {
+                return;
+            }
+            $files = $this->getComposer();
+            if (empty($files)) {
+                return;
+            }
+            $file  = array_shift($files);
+            $path  = $this->path('basedir') . $this->path($this->mnemo) . 'tmp';
+            $query = file_get_contents("{$path}/$file");
+            $this->log("{$path}/$file");
+            unlink("{$path}/$file");
+            //update_option('imegateleport_error', 'stop');
+            if (! $query) {
+                $this->error = 'file_get_contents';
+                return;
+            }
+            $this->query = $query;
+            $this->run();
         }
 
         /**
@@ -866,17 +987,17 @@ if (! class_exists('iMegaTeleport')) {
                         $valueType = 'select';
                     else
                         $valueType = 'text';
-
-                    $slug = $this->translit($name);
+                    
+                    $slug = $this->translit(mb_substr($name, 0, 199));
                     $name = $this->escape_string($name);
 
-                    $query .= "('{$id}','{$name}','{$slug}','{$valueType}',NULL),";
+                    $query .= $this->composer(self::CPROP, "('{$id}','{$name}','{$slug}','{$valueType}',NULL),");
 
                     if ($propery->{ATTRIBUTESVARIANTS}->count() >= 1)
                         foreach ($propery->{ATTRIBUTESVARIANTS}->{DIC} as $cat) {
                             $cat_valueid = (string) $cat->{VALUEID};
                             $cat_value = (string) $cat->{VALUE};
-                            $cat_value_slug = $this->translit($cat_value);
+                            $cat_value_slug = $this->translit(mb_substr($cat_value, 0, 199));
                             $cat_value = $this->escape_string($cat_value);
                             $query .= "('{$cat_valueid}','{$cat_value}','{$cat_value_slug}',NULL,'{$id}'),";
                         }
@@ -907,28 +1028,27 @@ if (! class_exists('iMegaTeleport')) {
                         $img_prop = $this->escape_string(serialize($arr));
                     }
                     
-                    $slug = $this->translit($name);
+                    $slug = $this->translit(mb_substr($name, 0, 199));
                     $name = $this->escape_string($name);
                     $article = $this->escape_string($product->{ARTICLE});
                     
-                    $query .= "('{$name}','{$desc}','{$id}','{$slug}','{$catalog_id}','{$article}','{$img}','{$img_prop}'),";
+                    $query .= $this->composer(self::CPROD, "('{$name}','{$desc}','{$id}','{$slug}','{$catalog_id}','{$article}','{$img}','{$img_prop}'),");
 
                     if ($product->{GROUPS}->count() >= 1)
                         foreach ($product->{GROUPS} as $group) {
                             $group_id = (string) $group->{ID};
-                            $query_misc .= "('group','{$id}','{$group_id}',NULL,NULL,NULL,NULL,0),";
+                            $query_misc .= $this->composer(self::CMISC, "('group','{$id}','{$group_id}',NULL,NULL,NULL,NULL,0),");
                         }
                     
                     if ($product->{PROPERTYVALUES}->count() >= 1)
                         foreach ($product->{PROPERTYVALUES}->{PROPERTYVALUE} as $property) {
                             $propery_id = (string) $property->{ID};
                             $property_value = (string) $property->{VALUE};
-                            $property_value_slug = $this->translit(
-                                    $property_value);
-                            $property_value = $this->escape_string(
-                                    $property_value);
+                            $property_value = $this->translit(mb_substr($property_value, 0, 199));
+                            $property_value_slug = $this->translit(mb_substr($property_value, 0, 199));
+                            $property_value = $this->escape_string($property_value);
                             if (! empty($property_value))
-                                $query_misc .= "('prop','{$id}','{$propery_id}','{$property_value}',NULL,NULL,'{$property_value_slug}',0),";
+                                $query_misc .= $this->composer(self::CMISC, "('prop','{$id}','{$propery_id}','{$property_value}',NULL,NULL,'{$property_value_slug}',0),");
                         }
                     
                     if ($product->{ATTRIBUTEVALUES}->count() >= 1 &&
@@ -938,18 +1058,19 @@ if (! class_exists('iMegaTeleport')) {
 
                         foreach ($product->{ATTRIBUTEVALUES}->{ATTRIBUTEVALUE} as $attr) {
                             $attr_name = (string) $attr->{NAME};
-                            $attr_name_slug = $this->translit($attr_name);
+                            $attr_name_slug = $this->translit(mb_substr($attr_name, 0, 199));
                             $attr_name = $this->escape_string($attr_name);
                             $attr_value = (string) $attr->{VALUE};
+                            $attr_value = $this->translit(mb_substr($attr_value, 0, 199));
                             $attr_valueSlug = $this->escape_string(
-                                    $this->translit($attr_value));
+                                    $this->translit(mb_substr($attr_value, 0, 199)));
                             $attr_value = $this->escape_string($attr_value);
                             if (! empty($attr_value)) {
                                 $visible = 0;
                                 if ($this->sets['kod'] == 'true' &&
                                          $attr_name_slug == 'kod')
                                     $visible = 1;
-                                $query_misc .= "('attr','{$id}','{$attr_name}','{$attr_value}','{$attr_name_slug}',$countAttr,'{$attr_valueSlug}',$visible),";
+                                $query_misc .= $this->composer(self::CMISC, "('attr','{$id}','{$attr_name}','{$attr_value}','{$attr_name_slug}',$countAttr,'{$attr_valueSlug}',$visible),");
                             }
                         }
                     }
@@ -1015,13 +1136,13 @@ if (! class_exists('iMegaTeleport')) {
                             $future_title = (string) $future->{NAME};
                             $future_value = (string) $future->{VALUE};
                             
-                            $future_title_slug = $this->translit($future_title);
-                            $future_value_slug = $this->translit($future_value);
+                            $future_title_slug = $this->translit(mb_substr($future_title, 0, 199));
+                            $future_value_slug = $this->translit(mb_substr($future_value, 0, 199));
                             
                             $future_title = $this->escape_string($future_title);
                             $future_value = $this->escape_string($future_value);
                             $doubleGuid = explode('#', $id);
-                            $query2 .= "('{$id}','{$doubleGuid[0]}','{$doubleGuid[1]}','{$future_title}','{$future_value}','{$future_title_slug}','{$future_value_slug}'),";
+                            $query2 .= $this->composer(self::COFFRES_FEATURES,"('{$id}','{$doubleGuid[0]}','{$doubleGuid[1]}','{$future_title}','{$future_value}','{$future_title_slug}','{$future_value_slug}'),");
                         }
                         $query2 = mb_substr($query2, 0, -1) . ";";
                     } else {
@@ -1040,16 +1161,15 @@ if (! class_exists('iMegaTeleport')) {
                                     $price->{CURRENCY});
                             $price_unit = $this->escape_string($price->{UNIT});
                             $price_ratio = $this->escape_string($price->{RATIO});
-                            $query3 .= "('{$id}','{$price_pred}',{$price_byunit},'{$price_cur}','{$price_unit}','{$price_ratio}','{$price_typeid}'),";
+                            $query3 .= $this->composer(self::COFFERS_PRICES,"('{$id}','{$price_pred}',{$price_byunit},'{$price_cur}','{$price_unit}','{$price_ratio}','{$price_typeid}'),");
                         }
                         $query3 = mb_substr($query3, 0, -1) . ";";
                     }
-                    $query1 .= "('{$id}','{$prod_guid}','{$barcode}','{$name}','{$base_unit}','{$base_unit_key}','{$base_unit_title}','{$base_unit_int}',$amount,'{$postType}'),";
+                    $query1 .= $this->composer(self::COFFERS,"('{$id}','{$prod_guid}','{$barcode}','{$name}','{$base_unit}','{$base_unit_key}','{$base_unit_title}','{$base_unit_int}',$amount,'{$postType}'),");
                 }
                 $query1 = mb_substr($query1, 0, -1) . ";";
                 $query = $query . $query1 . $query2 . $query3;
             }
-            $this->progress(50);
             return $query;
         }
 
@@ -1358,6 +1478,23 @@ if (! class_exists('iMegaTeleport')) {
             $mysqlnd = function_exists('mysqli_fetch_all');
             if ($mysqlnd)
                 $this->mysqlnd = true;
+
+            $this->keys = array(
+                self::CGROUP => "insert {$this->table_prefix}imega_groups(guid,parent,title,slug)values",
+                self::CPROP => "insert {$this->table_prefix}imega_prop(guid,title,slug,val_type,parent_guid)values",
+                self::CPROD => "insert {$this->table_prefix}imega_prod(title,descr,guid,slug,catalog_guid,article,img,img_prop)values",
+                self::CMISC => "insert {$this->table_prefix}imega_misc(type,guid,label,val,labelSlug,countAttr,valSlug,_visible)values",
+                self::COFFERS => "insert {$this->table_prefix}imega_offers(guid,prod_guid,barcode,title,base_unit,base_unit_key,base_unit_title,base_unit_int,amount,postType)values",
+                self::COFFRES_FEATURES => "insert {$this->table_prefix}imega_offers_features(offer_guid,prodGuid,variantGuid,title,val,titleSlug,valSlug)values",
+                self::COFFERS_PRICES => "insert {$this->table_prefix}imega_offers_prices(offer_guid,title,price,currency,unit,ratio,type_guid)values",
+                self::COTHER => ''
+            );
+
+            foreach($this->keys as $key => $value) {
+                $this->len[$key] = strlen($value);
+            }
+            $tmp = $this->path('basedir') . $this->path($this->mnemo) . 'tmp/';
+            $this->folder($tmp);
             $this->log('==iMegaTeleport ver.:' . self::VERSION);
             $this->log('==OPTIONS==');
             $this->log('    FORCE = ' . $this->force);
@@ -1398,6 +1535,7 @@ if (! class_exists('iMegaTeleport')) {
          */
         function pluginActivation ()
         {
+            $this->s('Activation');
             update_option('imegateleport-settings-postinstall', 'true');
             update_option('imegateleport-settings-zip', 'true');
             $this->query = $this->loadFile($this->filenameActivate);
@@ -1410,7 +1548,9 @@ if (! class_exists('iMegaTeleport')) {
         function pluginDeactivation ()
         {
             $force = true;
+            $this->s('Deactivation');
             delete_option('imegateleport_error');
+            delete_option('imegateleport_progress');
             $this->query = $this->loadFile('clear-'.$this->filenameBL, $force);
             $this->query .= $this->loadFile($this->filenameClear, $force);
             $this->query .= $this->loadFile($this->filenameDeactivate, $force);
@@ -1523,16 +1663,13 @@ if (! class_exists('iMegaTeleport')) {
             //}
             if (! isset($value)) {
                 $value = get_option('imegateleport_progress');
+
                 $this->log('    PROGRESS = ' . $value);
 
-                $error = get_option('imegateleport_error');
-                if ($error) {
-                    $this->log('    ERROR = ' . $error);
-                    $value = $error;
-                }
-                
                 if ($value == 100) {
                     delete_option('imegateleport_progress');
+                    update_option('imegateleport_complete', 1);
+                    $this->s('progress');
                 }
             } else {
                 update_option('imegateleport_progress', $value);
@@ -1566,14 +1703,22 @@ if (! class_exists('iMegaTeleport')) {
              * Проверка прогресса
              */
             if ($ajax && isset($_POST['action'])) {
-                $this->log('==AJAX POST==');
-                $this->log($_POST);
-                $this->log('==AJAX SERVER==');
-                $this->log($_SERVER);
+                //$this->log('==AJAX POST==');
+                //$this->log($_POST);
+                //$this->log('==AJAX SERVER==');
+                //$this->log($_SERVER);
                 switch ($_POST['action']) {
                     case 'imega_teleport':
+                        $this->lazyQuery();
                         $progress = $this->progress();
-                        echo $progress;
+                        $error = get_option('imegateleport_error');
+                        if ($error) {
+                            $this->log('    ERROR = ' . $error);
+                            $result['error'] = $error;
+                        }
+                        $result['complete'] = (int) get_option('imegateleport_complete', 0);
+                        $result['progress'] = $progress;
+                        echo json_encode($result);
                         $this->log("==PROGRESS = $progress");
                         exit();
                         break;
@@ -1646,7 +1791,7 @@ if (! class_exists('iMegaTeleport')) {
                 $this->error = $this->mysqli->connect_error;
                 return;
             }
-            
+            update_option('imegateleport_complete', 0);
             /*
              * // TODO next version $select = $this->mysqli->query("SELECT
              * @@global.max_allowed_packet"); if (! $select) { $this->error =
@@ -1655,10 +1800,12 @@ if (! class_exists('iMegaTeleport')) {
              * ($this->maxAllowedPacket > 0) { }
              */
             $this->log("==Mysql result==");
-            if ($this->mysqli->multi_query($this->query)) {
-                $this->error = $this->mysqli->connect_error;
-                return;
-            }
+            //if (!
+            $this->mysqli->multi_query($this->query);
+        //) {
+         //       $this->error = $this->mysqli->connect_error;
+         //   }
+
             $this->mysqli->close();
         }
 
@@ -1675,7 +1822,9 @@ if (! class_exists('iMegaTeleport')) {
             /*
              * 1. create tables
              */
-            $query = $this->loadFile($this->filenameTables);
+            $query = $this->composer(self::COTHER,
+                $this->loadFile($this->filenameTables),
+                true);
             /*
              * 2. load import xml
              */
@@ -1683,12 +1832,22 @@ if (! class_exists('iMegaTeleport')) {
             /*
              * 2.5 Если полное наименование сделать основным
              */
-            if ($this->sets['fullname'] == 'true')
-                $query .= $this->loadFile($this->filenameFullname);
+            if ($this->sets['fullname'] == 'true') {
+                $query = $this->composer(self::COTHER,
+                    $this->loadFile($this->filenameFullname),
+                    true);
+            }
             /*
              * 3. load offers xml
              */
             $query .= $this->loadOffers();
+            if (defined('IMEGATELEPORT_COMPOSER')) {
+                foreach ($this->keys as $key => $value){
+                    if (! empty($value)) {
+                        $this->composer($key, '', true);
+                    }
+                }
+            }
             /*
              * 4. business logic
              */
@@ -1698,11 +1857,38 @@ if (! class_exists('iMegaTeleport')) {
                     $queryBL);
             $queryBL = str_replace('{$imgpath}', $this->path($this->mnemo), 
                     $queryBL);
-            $query .= $queryBL;
+            $query .= $this->composer(self::COTHER, $queryBL, true);
             $queryBL = '';
+            $this->progress(50);
             $this->query = $query;
         }
 
+        /**
+         * Сохранение частей во временной директории
+         * @param $data
+         */
+        private function saveComposer($type)
+        {
+            $data = $this->keys[$type];
+            if (empty($this->values[$type])) {
+                return;
+            }
+            foreach ($this->values[$type] as $value){
+                $data .= $value;
+            }
+            $data = mb_substr($data, 0, -1) . ";";
+            $path = $this->path('basedir') . $this->path($this->mnemo) . 'tmp/';
+            $this->folder($path);
+            $files = scandir($path, SCANDIR_SORT_DESCENDING);
+            if (strpos($files[0], '.sql') >= 1){
+                $fileName = (int) $files[0] + 1;
+            } else {
+                $fileName = 10000;
+            }
+            $f = fopen($path . $fileName . '.sql', 'a');
+            fwrite($f, $data);
+            fclose($f);
+        }
         /**
          * Временный файл
          */

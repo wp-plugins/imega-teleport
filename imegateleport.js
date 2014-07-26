@@ -1,6 +1,6 @@
 /**
  * @package iMegaTeleport
- * @version 1.1
+ * @version 1.6
  * 
  * Copyright 2013 iMega ltd (email: info@imega.ru)
  *
@@ -80,18 +80,16 @@ function iMegaTeleportGetProgress() {
 	jQuery.post(ajaxurl, data, function(response) {
 		iMegaInteval = setInterval(
 			function(){
-				if (response.length <= 3) {
-					var $value = response*1;
-				} else {
+                var $value = response.progress*1;
+                if (typeof response.error !== 'undefined') {
 					clearInterval(iMegaProgress);
 					jQuery('#iMegaExistProgress').val(0);
 					jQuery('#iMegaProgress').attr('class', 'error');
 					jQuery('#iMegaTeleportProgressMsg').html(response);
 					var $value = 0;
 				}
-
 				iMegaAnimateProgress($value);
-				if ($value >= 100) {
+				if ($value >= 100 || response.complete == 1) {
 					if (typeof iMegaInteval === "undefined") {
 						clearInterval(iMegaProgress);
 						jQuery('#iMegaProgress').slideUp();
@@ -103,10 +101,10 @@ function iMegaTeleportGetProgress() {
 					}
 				}
 			},10);
-	});
+	}, 'json');
 }
 
-function iMegaAnimateProgress($value, $animate) {
+function iMegaAnimateProgress($value) {
     var $progress = jQuery('#iMegaTeleportProgressBar');
     var $diplay = jQuery('#iMegaProgressDisplay');
 	var pVal = $progress.progressbar('option', 'value');
