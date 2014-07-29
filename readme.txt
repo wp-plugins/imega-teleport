@@ -91,6 +91,14 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.6.1 =
+Fix error scandir() expects parameter 2 to be long, string given
+Fix error Undefined index: PHP_AUTH_PW
+
+= 1.6 =
+Fix parser xml
+Change folder for order.xml
+
 = 1.5 =
 Added IMEGATELEPORT_HOST is a PHP constant. The host MySQL. Can be either a host name or an IP address. 
 Added IMEGATELEPORT_PORT is a PHP constant. Specifies the port number to attempt to connect to the MySQL server.

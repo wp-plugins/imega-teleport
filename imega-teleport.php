@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6
+ * Version: 1.6.1
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -549,8 +549,14 @@ if (! class_exists('iMegaTeleport')) {
             
             switch ($_GET['mode']) {
                 case 'checkauth':
-                    $login = $_SERVER['PHP_AUTH_USER'];
-                    $pass = $_SERVER['PHP_AUTH_PW'];
+                    if (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
+                        $login = $_SERVER['PHP_AUTH_USER'];
+                        $pass = $_SERVER['PHP_AUTH_PW'];
+                    } else {
+                        list($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW']) =
+                            explode(':', base64_decode(substr($_SERVER['HTTP_AUTHORIZATION'], 6)));
+                    }
+
                     if (defined('IMEGATELEPORT_AUTH_USER'))
                         $login = IMEGATELEPORT_AUTH_USER;
                     if (defined('IMEGATELEPORT_AUTH_PW'))
@@ -1452,7 +1458,15 @@ if (! class_exists('iMegaTeleport')) {
             global $table_prefix;
             $this->table_prefix = $table_prefix;
             $this->upload_dir = wp_upload_dir();
-            
+
+            if(!defined('SCANDIR_SORT_ASCENDING')) {
+                define('SCANDIR_SORT_ASCENDING', 0);
+            }
+
+            if(!defined('SCANDIR_SORT_DESCENDING')) {
+                define('SCANDIR_SORT_DESCENDING', 1);
+            }
+
             if (defined('IMEGATELEPORT_FORCE'))
                 if (IMEGATELEPORT_FORCE === true) {
                     $this->force = IMEGATELEPORT_FORCE;
