@@ -91,6 +91,9 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.6.2 =
+Fix order.xml
+
 = 1.6.1 =
 Fix error scandir() expects parameter 2 to be long, string given
 Fix error Undefined index: PHP_AUTH_PW

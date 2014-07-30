@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.1
+ * Version: 1.6.2
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -1238,7 +1238,7 @@ if (! class_exists('iMegaTeleport')) {
         function orders ()
         {
             $this->log('==ORDERS==');
-            $file = $this->path('basedir') . $this->path($this->mnemo) . $this->filenameOrder;
+            $file = dirname(__FILE__) . '/' . $this->filenameOrder;
             try {
                 $order = new SimpleXMLElement($file, 0, true);
             } catch (Exception $e) {
