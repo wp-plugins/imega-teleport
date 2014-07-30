@@ -1,0 +1,40 @@
+<div class=wrap>
+<div style="float:left;width:90px;height:70px;background:url({$logo}) no-repeat center"></div>
+<h1 style="line-height: 70px">{$title}</h1>
+<div style="clear:both"></div>
+<h2></h2>
+<div style="clear:both; height:10px"></div>
+<label class=imegasets for=fullname>
+<input id=fullname type=checkbox name=fullname{$checked_name}>
+В названии товара использовать полное наименование
+</label>
+<div style="clear:both; height:15px"></div>
+<label class=imegasets for=kod>
+<input id=kod name=kod type=checkbox{$checked_kod}>
+Отображать код товара
+</label>
+<div style="clear:both; height:15px"></div>
+<label class=imegasets for=zip>
+<input id=zip name=zip type=checkbox{$checked_zip}>
+Использовать сжатие
+</label>
+<div style="clear:both; height:20px"></div>
+<h2>Загрузить товар</h2>
+<p>Настройте узел обмена с сайтомв 1С, воспользуйтесь <a href=http://teleport.imega.ru/instructions>инструкцией в картинках</a><br>
+Скопируйте ссылку <a href="{$url}">{$url}</a> в форму обмена с сайтом 1С.</p>
+<h3>Если нет возможности с 1С напрямую, то</h3>
+<p>Скопируйте выгруженные файлы 1С (import.xml, offers.xml и папку import_files) в<br>{$path}<br>затем нажмите кнопку <b>Загрузить товар</b>.</p>
+<p class="submit">
+<input id="imegaGOGO" class="button button-primary" type="button" value="Загрузить товар">
+</p>
+<h2>Статистика использования</h2>
+<p>{$stat}</p>
+<h2>Поддержка пользователя</h2>
+<p><a href=http://teleport.imega.ru>О проекте iMega Teleport</a><br>
+<a href=http://teleport.imega.ru/feedback>{$feedback}</a></p>
+<h2>Поддержка проекта</h2>
+<p>Спасибо за использование <a href=http://teleport.imega.ru>iMega Teleport</a>.</p>
+<p class="submit">
+<a href=http://teleport.imega.ru/donate class="button button-primary" title="Сделать пожертвование!">Дать денежку на развитие проекта!</a>
+</p>
+</div>
