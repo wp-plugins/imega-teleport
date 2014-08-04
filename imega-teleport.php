@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.2
+ * Version: 1.6.3
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -549,6 +549,8 @@ if (! class_exists('iMegaTeleport')) {
             
             switch ($_GET['mode']) {
                 case 'checkauth':
+                    $login = '';
+                    $pass = '';
                     if (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
                         $login = $_SERVER['PHP_AUTH_USER'];
                         $pass = $_SERVER['PHP_AUTH_PW'];
@@ -1245,23 +1247,20 @@ if (! class_exists('iMegaTeleport')) {
                 return;
             }
             $order[DATE_CREATE] = date("Y-m-d");
-            /*
-             * Получить заказы из БД
-             */
-            $fileQueryItems = $this->loadFile($this->fileQueryItems);
-            $fileQueryCustomer = $this->loadFile($this->fileQueryCustomer);
+            $fileQueryItems     = $this->loadFile($this->fileQueryItems);
+            $fileQueryCustomer  = $this->loadFile($this->fileQueryCustomer);
             
             if (! $this->mysqli->multi_query('SET NAMES ' . DB_CHARSET)) {
                 $this->error = $this->mysqli->connect_error;
                 return;
             }
             
-            $resItems = $this->mysqli->query($fileQueryItems);
+            $resItems  = $this->mysqli->query($fileQueryItems);
             $itemsRows = $resItems->fetch_all();
             
-            $resCustomer = $this->mysqli->query($fileQueryCustomer);
+            $resCustomer  = $this->mysqli->query($fileQueryCustomer);
             $customerRows = $resCustomer->fetch_all();
-            $customers = array();
+            $customers    = array();
             foreach ($customerRows as $c) {
                 if (! empty($c[3])) {
                     $customers[$c[1]][$c[2]] = $c[3];
@@ -1271,7 +1270,7 @@ if (! class_exists('iMegaTeleport')) {
             /*
              * Выбрать все документы Пересобрать товары в документе
              */
-            $docs = array();
+            $docs  = array();
             $items = array();
             
             foreach ($itemsRows as $item) {
@@ -1317,6 +1316,7 @@ if (! class_exists('iMegaTeleport')) {
                 $doc->{ID} = $docNo;
                 $doc->{NUMBER} = $docNo;
                 $doc->{CURRENCY} = $customers[$docNo]['_order_currency'];
+                $doc->{OPERATION} = 'Заказ товара';
                 $datetime = explode(' ', $items[$docNo]['datetime']);
                 $doc->{DATE} = $datetime[0];
                 $doc->{TIME} = $datetime[1];
@@ -1342,12 +1342,11 @@ if (! class_exists('iMegaTeleport')) {
                 $address->{ADDRESS_TITLE} = substr($fieldStr, 0, - 1);
                 $goods = $doc->addChild(GOODS);
                 foreach ($items[$docNo]['goods'] as $item) {
-                    
                     $good = $goods->addChild(GOOD);
-                    $good->{NAME} = $item['title'];
-                    $good->{ID} = $item['_product_id'];
+                    $good->{NAME}   = $item['title'];
+                    $good->{ID}     = $item['_product_id'];
                     $good->{AMOUNT} = $item['_qty'];
-                    $good->{SUM} = $item['_line_total'];
+                    $good->{SUM}    = $item['_line_total'];
                 }
                 
                 $attrs = $doc->addChild(ATTRIBUTEVALUES);
