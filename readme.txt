@@ -91,6 +91,15 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.6.4 =
+Fix properties of products without translate.
+Fix value size taxonomy for term_taxonomy
+Fix long ID of products
+Fix fields of order set optional
+
+= 1.6.3 =
+Fix field 'operation' of order
+
 = 1.6.2 =
 Fix order.xml
 
