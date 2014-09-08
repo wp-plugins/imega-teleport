@@ -4,11 +4,11 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.4
+ * Version: 1.6.5
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
- * Tested up to: 3.9
+ * Tested up to: 4.0
  */
 /**
  * Copyright 2013 iMega ltd (email: info@imega.ru)
@@ -127,7 +127,7 @@ if (! class_exists('iMegaTeleport')) {
      */
     class iMegaTeleport
     {
-        const VERSION = '1.5';
+        const VERSION = '1.6.5';
         
         const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
               ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
@@ -140,7 +140,10 @@ if (! class_exists('iMegaTeleport')) {
             COFFERS = 4,
             COFFRES_FEATURES = 5,
             COFFERS_PRICES = 6,
-            COTHER = 7;
+            COTHER = 7,
+
+            LAZY_FILES = 0,
+            LAZY_MEMORY = 1;
         
         protected $error = false;
 
@@ -229,7 +232,6 @@ if (! class_exists('iMegaTeleport')) {
                 $this->runQuery();
                 $this->log('==QUERY==');
                 $this->log($this->query);
-                $this->run();
             }
             $this->log('==END==');
             restore_error_handler();
@@ -302,6 +304,31 @@ if (! class_exists('iMegaTeleport')) {
         }
 
         /**
+         * Декомпозиция запросов на одиночные
+         * @param $query
+         *
+         * @return mixed
+         */
+        private function composerOther($query, $lazy = self::LAZY_FILES)
+        {
+            if (! function_exists('mysqli_multi_query')) {
+                $pattern = '/^([set|insert|select|update|drop|create|replace|truncate](.|\s)*;)$/mU';
+                preg_match_all($pattern, $query, $queries);
+                foreach ($queries[1] as $value) {
+                    $this->values[self::COTHER][] = $value;
+                    if ($lazy == self::LAZY_FILES) {
+                        $this->saveComposer(self::COTHER);
+                        unset($this->values[self::COTHER]);
+                    }
+                }
+                return;
+            }
+            $this->values[self::COTHER][] = $query;
+
+            return $query;
+        }
+
+        /**
          * Композер
          * @param $type
          * @param $query
@@ -319,7 +346,7 @@ if (! class_exists('iMegaTeleport')) {
                 $this->len[$type] = $total;
             } else {
                 if ($type == self::COTHER) {
-                    $this->values[$type][] = $query;
+                    $this->values[$type][] = $this->composerOther($query);
                 }
                 $this->saveComposer($type);
                 unset($this->values[$type]);
@@ -329,10 +356,9 @@ if (! class_exists('iMegaTeleport')) {
                 }
             }
 
-
-
             return '';
         }
+
         /**
          * Соединение с БД
          */
@@ -380,7 +406,11 @@ if (! class_exists('iMegaTeleport')) {
             }
             if ($this->mysqlnd) {
                 $rows = $res->fetch_all();
-                $grants = $rows[1][0];
+                if (isset($rows[1][0])) {
+                    $grants = $rows[1][0];
+                } else {
+                    $grants = $rows[0][0];
+                }
             } else {
                 $rows = array();
                 while($row = $res->fetch_assoc()) {
@@ -593,7 +623,7 @@ if (! class_exists('iMegaTeleport')) {
                             unlink($filename);
                     }
                     if ($_GET['filename'] == 'offers.xml') {
-                        $this->progress(14);
+                        $this->progress(4);
                         $result = true;
                     }
                     echo "success\n";
@@ -650,11 +680,14 @@ if (! class_exists('iMegaTeleport')) {
             
             $isInstall = false;
             
-            $theme = wp_get_theme();
-            $nameTheme = $theme->get( 'Name' );
+            $theme = $this->getTheme();
+            if (empty($theme)) {
+                return;
+            }
+            $nameTheme = $theme['Name'];
             $strTheme = $nameTheme;
-            $strTheme .= ' ' . $theme->get( 'Version' );
-            $strTheme .= ' ' . $theme->get( 'Author');
+            $strTheme .= ' ' . $theme['Version'];
+            $strTheme .= ' ' . $theme['Author'];
             $key = array_search($strTheme, $names);
             if ($key !== false) {
                 $this->filenameBL = mb_strtolower($nameTheme).'.sql';
@@ -742,6 +775,40 @@ if (! class_exists('iMegaTeleport')) {
             }
         }
 
+        private function getTheme()
+        {
+            global $wp_theme_directories;
+
+            $themeFolder = get_option('stylesheet');
+            if (! $themeFolder) {
+                return false;
+            }
+
+            $stylesheet = get_raw_theme_root($themeFolder);
+            if ( false === $stylesheet )
+                $stylesheet = WP_CONTENT_DIR . '/themes';
+            elseif ( ! in_array( $stylesheet, (array) $wp_theme_directories ) )
+                $stylesheet = WP_CONTENT_DIR . $stylesheet;
+
+            $tags = get_file_data($stylesheet . "/$themeFolder/style.css",
+                array(
+                    'Name'        => 'Theme Name',
+                    'ThemeURI'    => 'Theme URI',
+                    'Description' => 'Description',
+                    'Author'      => 'Author',
+                    'AuthorURI'   => 'Author URI',
+                    'Version'     => 'Version',
+                    'Template'    => 'Template',
+                    'Status'      => 'Status',
+                    'Tags'        => 'Tags',
+                    'TextDomain'  => 'Text Domain',
+                    'DomainPath'  => 'Domain Path',
+                ),
+                'theme');
+
+            return $tags;
+        }
+
         /**
          * Action Hooks
          */
@@ -807,6 +874,7 @@ if (! class_exists('iMegaTeleport')) {
                 'siteurl' => get_option('siteurl'),
                 'woocommerce_db_version' => get_option('woocommerce_db_version'),
                 'woocommerce_version' => get_option('woocommerce_version'),
+                'imegateleport_version' => self::VERSION,
                 'imegateleport_progress' => get_option('imegateleport_progress'),
                 'imegateleport_complete' => get_option('imegateleport_complete'),
                 'imegateleport_error' => get_option('imegateleport_error'),
@@ -826,30 +894,64 @@ if (! class_exists('iMegaTeleport')) {
         /**
          * Отложенный запрос
          */
-        public function lazyQuery()
+        public function lazyQuery($lazy)
         {
-            if ($this->progress() <= 49 ||
-                ! defined('IMEGATELEPORT_COMPOSER')) {
-                return;
-            }
-            $files = $this->getComposer();
-            if (empty($files)) {
-                return;
-            }
-            $file  = array_shift($files);
-            $path  = $this->path('basedir') . $this->path($this->mnemo) . 'tmp';
-            $query = file_get_contents("{$path}/$file");
-            $this->log("{$path}/$file");
-            unlink("{$path}/$file");
+            //if ($this->progress() <= 20 ||
+            //    ! defined('IMEGATELEPORT_COMPOSER')) {
+            //    return;
+            //}
+            $query = $this->lazyResource($lazy);
 
-            if (! $query) {
-                $this->error = 'file_get_contents';
+            if (empty($query)) {
                 return;
             }
-            $this->query = $query;
-            $this->run();
+
+            foreach ($query as $value) {
+                $this->query = $value;
+                $this->run();
+            }
+
         }
 
+        /**
+         * Источник отложенных запросов
+         *
+         * @param $lazy
+         *
+         * @return string
+         */
+        private function lazyResource($lazy)
+        {
+            $result = '';
+            switch ($lazy) {
+                case self::LAZY_FILES:
+                    $files = $this->getComposer();
+                    if (empty($files)) {
+                        return;
+                    }
+                    $hundred = get_option('imegateleport_files', 0);
+                    if ($hundred > 0) {
+                        $current = count($files);
+                        $a       = ceil(($current * 100) / $hundred);
+                        $b       = 30 - ceil(($a * 30) / 100);
+                        $p       = (int) $this->progress();
+                        if ($p >= 20 && $p < 50) {
+                            $this->progress(($b + $p) > 50 ? 50 : ($b + $p));
+                        }
+                    }
+                    $file  = array_shift($files);
+                    $path  = $this->path('basedir') . $this->path($this->mnemo) . 'tmp';
+                    $query = file_get_contents("{$path}/$file");
+                    $this->log("{$path}/$file");
+                    unlink("{$path}/$file");
+                    $result[] = $query;
+                    break;
+                case self::LAZY_MEMORY:
+                    $result = $this->values[self::COTHER];
+                    break;
+            }
+            return $result;
+        }
         /**
          * Загружает файл с текущей директори плагина
          *
@@ -908,7 +1010,7 @@ if (! class_exists('iMegaTeleport')) {
             if ($this->error && $this->force === false) {
                 return;
             }
-            $file = $this->path('baseurl') . $this->path($this->mnemo) .
+            $file = $this->path('basedir') . $this->path($this->mnemo) .
                      $this->filenameImport;
             try {
                 $import = new SimpleXMLElement($file, 0, true);
@@ -1034,7 +1136,7 @@ if (! class_exists('iMegaTeleport')) {
                 $query = mb_substr($query, 0, -1) . ";";
                 $query_misc = mb_substr($query_misc, 0, -1) . ";";
             }
-            $this->progress(25);
+            $this->progress(10);
             return $query . $query_misc;
         }
 
@@ -1048,7 +1150,7 @@ if (! class_exists('iMegaTeleport')) {
             if ($this->error && $this->force === false) {
                 return;
             }
-            $file = $this->path('baseurl') . $this->path($this->mnemo) .
+            $file = $this->path('basedir') . $this->path($this->mnemo) .
                      $this->filenameOffers;
             
             try {
@@ -1198,7 +1300,7 @@ if (! class_exists('iMegaTeleport')) {
             $fileQueryItems     = $this->loadFile($this->fileQueryItems);
             $fileQueryCustomer  = $this->loadFile($this->fileQueryCustomer);
             
-            if (! $this->mysqli->multi_query('SET NAMES ' . DB_CHARSET)) {
+            if (! $this->mysqli->multi_query('set names ' . DB_CHARSET . ';')) {
                 $this->error = $this->mysqli->connect_error;
                 return;
             }
@@ -1278,18 +1380,19 @@ if (! class_exists('iMegaTeleport')) {
                 
                 $address = $doc->addChild(ADDRESS);
                 
-                $filelds = array(
+                $fields = array(
                     '_shipping_postcode',
-                    '_billing_state',
-                    '_billing_city',
-                    '_billing_address_1');
+                    '_shipping_state',
+                    '_shipping_city',
+                    '_shipping_address_1',
+                    '_shipping_address_2');
                 $fieldStr = '';
-                foreach ($filelds as $field) {
+                foreach ($fields as $field) {
                     if (empty($customers[$docNo][$field])) {
                         $fieldStr .= $customers[$docNo][$field] . ',';
                     }
                 }
-                $address->{ADDRESS_TITLE} = substr($fieldStr, 0, - 1);
+                $address->{ADDRESS_TITLE} = mb_substr($fieldStr, 0, - 1);
                 $goods = $doc->addChild(GOODS);
                 foreach ($items[$docNo]['goods'] as $item) {
                     $good = $goods->addChild(GOOD);
@@ -1351,7 +1454,7 @@ if (! class_exists('iMegaTeleport')) {
                 return;
             }
             
-            if (! $this->mysqli->multi_query('SET NAMES ' . DB_CHARSET)) {
+            if (! $this->mysqli->multi_query('set names ' . DB_CHARSET . ';')) {
                 $this->error = $this->mysqli->connect_error;
                 return;
             }
@@ -1504,8 +1607,11 @@ if (! class_exists('iMegaTeleport')) {
             $this->s('Activation');
             update_option('imegateleport-settings-postinstall', 'true');
             update_option('imegateleport-settings-zip', 'true');
-            $this->query = $this->loadFile($this->filenameActivate);
-            $this->run();
+            $this->query = $this->composerOther(
+                $this->loadFile($this->filenameActivate),
+                self::LAZY_MEMORY
+            );
+            $this->lazyQuery(self::LAZY_MEMORY);
         }
 
         /**
@@ -1517,10 +1623,13 @@ if (! class_exists('iMegaTeleport')) {
             $this->s('Deactivation');
             delete_option('imegateleport_error');
             delete_option('imegateleport_progress');
-            $this->query = $this->loadFile('clear-'.$this->filenameBL, $force);
-            $this->query .= $this->loadFile($this->filenameClear, $force);
-            $this->query .= $this->loadFile($this->filenameDeactivate, $force);
-            $this->run($force);
+            $query = $this->loadFile('clear-'.$this->filenameBL, $force);
+            $query .= $this->loadFile($this->filenameClear, $force);
+            $query .= $this->loadFile($this->filenameDeactivate, $force);
+            $this->rmrf($path = $this->path('basedir') . $this->path($this->mnemo) . 'tmp');
+            $this->query = $this->composerOther($query, self::LAZY_MEMORY);
+            $this->force = $force;
+            $this->lazyQuery(self::LAZY_MEMORY);
         }
 
         /**
@@ -1594,19 +1703,19 @@ if (! class_exists('iMegaTeleport')) {
             $text = str_replace('{$url}', get_site_url(), $text);
             $text = str_replace('{$stat}', $this->stat(), $text);
             $text = str_replace('{$feedback}', __('Feedback'), $text);
-            
+
             $checked = '';
             $name = get_option('imegateleport-settings-fullname');
             if ($name == 'true')
                 $checked = ' checked value=1';
             $text = str_replace('{$checked_name}', $checked, $text);
-            
+
             $checked = '';
             $name = get_option('imegateleport-settings-kod');
             if ($name == 'true')
                 $checked = ' checked value=1';
             $text = str_replace('{$checked_kod}', $checked, $text);
-            
+
             $checked = '';
             $zip = get_option('imegateleport-settings-zip');
             if ($zip == 'true')
@@ -1624,14 +1733,9 @@ if (! class_exists('iMegaTeleport')) {
          */
         function progress ($value = null)
         {
-            //if ($this->error && $this->force === false) {
-            //    return;
-            //}
             if (! isset($value)) {
                 $value = get_option('imegateleport_progress');
-
                 $this->log('    PROGRESS = ' . $value);
-
                 if ($value == 100) {
                     delete_option('imegateleport_progress');
                     update_option('imegateleport_complete', 1);
@@ -1661,21 +1765,11 @@ if (! class_exists('iMegaTeleport')) {
          */
         function routers ($ajax = false)
         {
-            //if ($this->error && $this->force === false) {
-            //    return;
-            //}
             $result = false;
-            /*
-             * Проверка прогресса
-             */
             if ($ajax && isset($_POST['action'])) {
-                //$this->log('==AJAX POST==');
-                //$this->log($_POST);
-                //$this->log('==AJAX SERVER==');
-                //$this->log($_SERVER);
                 switch ($_POST['action']) {
                     case 'imega_teleport':
-                        $this->lazyQuery();
+                        $this->lazyQuery(self::LAZY_FILES);
                         $progress = $this->progress();
                         $error = get_option('imegateleport_error');
                         if ($error) {
@@ -1729,7 +1823,7 @@ if (! class_exists('iMegaTeleport')) {
                 
             if (! $ajax && isset($_POST['action'])) {
                 if ($_POST['action'] == 'imegagogo') {
-                    $this->progress(15);
+                    $this->progress(5);
                     return true;
                 }
             }
@@ -1741,35 +1835,28 @@ if (! class_exists('iMegaTeleport')) {
             }
         }
 
+        private function rmrf($dir) {
+            if ($objs = glob($dir."/*")) {
+                foreach($objs as $obj) {
+                    is_dir($obj) ? $this->rmrf($obj) : unlink($obj);
+                }
+            }
+            rmdir($dir);
+        }
+
         /**
          * Запуск
          */
-        function run ($force = false)
+        function run($force = false)
         {
             if ($this->error && $this->force === $force) {
                 return;
             }
-            
-            if (! $this->mysqli->multi_query('SET NAMES ' . DB_CHARSET)) {
-                $this->error = $this->mysqli->connect_error;
-                return;
-            }
+            $this->sendQuery('set names ' . DB_CHARSET . ';');
             update_option('imegateleport_complete', 0);
-            /*
-             * // TODO next version $select = $this->mysqli->query("SELECT
-             * @@global.max_allowed_packet"); if (! $select) { $this->error =
-             * $this->mysqli->connect_error; return; } else { $size =
-             * $select->fetch_array(); $this->maxAllowedPacket = $size[0]; } if
-             * ($this->maxAllowedPacket > 0) { }
-             */
             $this->log("==Mysql result==");
-            //if (!
-            $this->mysqli->multi_query($this->query);
-        //) {
-         //       $this->error = $this->mysqli->connect_error;
-         //   }
-
-            $this->mysqli->close();
+            $this->sendQuery($this->query);
+            //$this->mysqli->close();
         }
 
         /**
@@ -1812,8 +1899,59 @@ if (! class_exists('iMegaTeleport')) {
                     $queryBL);
             $query .= $this->composer(self::COTHER, $queryBL, true);
             $queryBL = '';
-            $this->progress(50);
+            $this->progress(20);
+            update_option('imegateleport_files', count($this->getComposer()));
             $this->query = $query;
+        }
+
+        private function sendQuery($value)
+        {
+            if (function_exists('mysqli_multi_query')) {
+                $this->sendQueryMulti($value);
+            } else {
+                $this->sendQueryOne($value);
+            }
+        }
+
+        private function sendQueryOne($value)
+        {
+            if (! empty($value) && ! $this->mysqli->query($value)) {
+                $this->error = $this->mysqli->error;
+                $lastQuery = get_option('imegateleport_query', 0);
+                if ($lastQuery === 0) {
+                    $lastQuery = mb_substr($value, 0, 199);
+                }
+                update_option('imegateleport_error', $this->mysqli->error . "<br>Query: $lastQuery...");
+                return;
+            }
+        }
+
+        private function sendQueryMulti($value)
+        {
+//            $lastQuery = get_option('imegateleport_query', 0);
+            if (! $this->mysqli->multi_query($value)) {
+                $this->error = $this->mysqli->connect_error;
+
+                /*
+                 * do {
+
+                if ($result = $mysqli->store_result()) {
+                    while ($row = $result->fetch_row()) {
+                        printf("%s\n", $row[0]);
+                    }
+                    $result->free();
+                }
+
+                if ($mysqli->more_results()) {
+                    printf("-----------------\n");
+                }
+            } while ($mysqli->next_result());
+                */
+
+
+
+                return;
+            }
         }
 
         /**
@@ -1829,6 +1967,9 @@ if (! class_exists('iMegaTeleport')) {
             foreach ($this->values[$type] as $value){
                 $data .= $value;
             }
+            if (empty($data)) {
+                return;
+            }
             $data = mb_substr($data, 0, -1) . ";";
             $path = $this->path('basedir') . $this->path($this->mnemo) . 'tmp/';
             $this->folder($path);
@@ -1836,7 +1977,7 @@ if (! class_exists('iMegaTeleport')) {
             if (strpos($files[0], '.sql') >= 1){
                 $fileName = (int) $files[0] + 1;
             } else {
-                $fileName = 10000;
+                $fileName = 10000000;
             }
             $f = fopen($path . $fileName . '.sql', 'a');
             fwrite($f, $data);

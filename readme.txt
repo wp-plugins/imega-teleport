@@ -3,7 +3,7 @@ Contributors: iMega
 Donate link: http://teleport.imega.ru/donate
 Tags: 1C, import, viper, , ecommerce, e-commerce, commerce, woothemes, wordpress ecommerce, affiliate, store, sales, sell, shop, shopping, cart, checkout, configurable, variable, widgets, reports, download, downloadable, digital, inventory, stock, reports, shipping, tax
 Requires at least: 3.5
-Tested up to: 3.9
+Tested up to: 4
 Stable tag: 4.3
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -90,6 +90,11 @@ iMegaTeleport выгружает данные о товаре: название,
 1. Settings of a plugin.
 
 == Changelog ==
+
+= 1.6.5 =
+Fix a order
+Fix composer
+Fix queries
 
 = 1.6.4 =
 Fix properties of products without translate.

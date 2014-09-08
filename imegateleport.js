@@ -67,9 +67,7 @@ jQuery(document).ready(function() {
 	});
 	
 	if ($progress >= 1) {
-		iMegaProgress = setInterval(function(){
-			iMegaTeleportGetProgress();
-			},1000);
+		iMegaTeleportGetProgress();
 	}
 });
 
@@ -77,16 +75,17 @@ function iMegaTeleportGetProgress() {
 	var data = {
 		action: 'imega_teleport'
 	};
-	jQuery.post(ajaxurl, data, function(response) {
-		iMegaInteval = setInterval(
-			function(){
+    clearInterval(iMegaProgress);
+    jQuery.post(ajaxurl, data, function(response) {
+        iMegaInteval = setInterval(
+            function(){
                 var $value = response.progress*1;
                 if (typeof response.error !== 'undefined') {
-					clearInterval(iMegaProgress);
-					jQuery('#iMegaExistProgress').val(0);
-					jQuery('#iMegaProgress').attr('class', 'error');
-					jQuery('#iMegaTeleportProgressMsg').html(response);
-					var $value = 0;
+                    clearInterval(iMegaProgress);
+                    jQuery('#iMegaExistProgress').val(0);
+                    jQuery('#iMegaProgress').attr('class', 'error');
+                    jQuery('#iMegaTeleportProgressMsg').html(response.error);
+                    var $value = 0;
 				}
 				iMegaAnimateProgress($value);
 				if ($value >= 100 || response.complete == 1) {
@@ -101,6 +100,9 @@ function iMegaTeleportGetProgress() {
 					}
 				}
 			},10);
+        iMegaProgress = setInterval(function(){
+            iMegaTeleportGetProgress();
+        },500);
 	}, 'json');
 }
 
@@ -109,11 +111,11 @@ function iMegaAnimateProgress($value) {
     var $diplay = jQuery('#iMegaProgressDisplay');
 	var pVal = $progress.progressbar('option', 'value');
     var pCnt = !isNaN(pVal) ? (pVal + 1) : 1;
-	if (pCnt >= $value) {		
+	if (pCnt >= $value) {
         clearInterval(iMegaInteval);
         iMegaInteval = undefined;
     } else {
-    	$progress.progressbar({value: pCnt});
-    	$diplay.text((pCnt+1*1)+'%');
+        $progress.progressbar({value: pCnt});
+        $diplay.text((pCnt+1*1)+'%');
     }
 }
