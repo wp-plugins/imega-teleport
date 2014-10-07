@@ -91,6 +91,9 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.6.6 =
+Add to order shipping cost.
+
 = 1.6.5 =
 Fix a order
 Fix composer

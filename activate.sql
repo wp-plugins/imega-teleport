@@ -1,6 +1,6 @@
 /**
  * @package iMegaTeleport
- * @version 
+ * @version 1.6.6
  * 
  * Copyright 2013 iMega ltd (email: info@imega.ru)
  *

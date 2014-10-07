@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.5
+ * Version: 1.6.6
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -942,7 +942,7 @@ if (! class_exists('iMegaTeleport')) {
                     $file  = array_shift($files);
                     $path  = $this->path('basedir') . $this->path($this->mnemo) . 'tmp';
                     $query = file_get_contents("{$path}/$file");
-                    $this->log("{$path}/$file");
+                    $this->log("LAZY RESOURCE: {$path}/$file");
                     unlink("{$path}/$file");
                     $result[] = $query;
                     break;
@@ -1401,7 +1401,25 @@ if (! class_exists('iMegaTeleport')) {
                     $good->{AMOUNT} = $item['_qty'];
                     $good->{SUM}    = $item['_line_total'];
                 }
-                
+
+                if (isset($customers[$docNo]['_order_shipping'])) {
+                    $good = $goods->addChild(GOOD);
+                    $good->{NAME}   = 'Доставка заказа';
+                    $good->{ID}     = 'ORDER_DELIVERY';
+                    $good->{AMOUNT} = 1;
+                    $good->{SUM}    = $customers[$docNo]['_order_shipping'];
+
+                    $deliveryAttrs  = $good->addChild(ATTRIBUTEVALUES);
+
+                    $attr = $deliveryAttrs->addChild(ATTRIBUTEVALUE);
+                    $attr->{NAME} = 'ВидНоменклатуры';
+                    $attr->{VALUE} = 'Услуга';
+
+                    $attr = $deliveryAttrs->addChild(ATTRIBUTEVALUE);
+                    $attr->{NAME} = 'ТипНоменклатуры';
+                    $attr->{VALUE} = 'Услуга';
+                }
+
                 $attrs = $doc->addChild(ATTRIBUTEVALUES);
                 $attrNames = array(
                     'Метод оплаты',
@@ -1979,6 +1997,7 @@ if (! class_exists('iMegaTeleport')) {
             } else {
                 $fileName = 10000000;
             }
+            $this->log('saveComposer: '.$path . $fileName . '.sql');
             $f = fopen($path . $fileName . '.sql', 'a');
             fwrite($f, $data);
             fclose($f);
