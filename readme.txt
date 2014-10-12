@@ -91,6 +91,9 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.6.7 =
+Fix convert property of products to translite.
+
 = 1.6.6 =
 Add to order shipping cost.
 

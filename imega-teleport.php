@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.6
+ * Version: 1.6.7
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -1102,7 +1102,7 @@ if (! class_exists('iMegaTeleport')) {
                         foreach ($product->{PROPERTYVALUES}->{PROPERTYVALUE} as $property) {
                             $propery_id = (string) $property->{ID};
                             $property_value = (string) $property->{VALUE};
-                            $property_value = $this->translit(mb_substr($property_value, 0, 199));
+                            $property_value = mb_substr($property_value, 0, 199);
                             $property_value_slug = $this->translit(mb_substr($property_value, 0, 199));
                             $property_value = $this->escape_string($property_value);
                             if (! empty($property_value))
