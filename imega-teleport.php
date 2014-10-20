@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.8
+ * Version: 1.6.9
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -125,12 +125,12 @@ if (! class_exists('iMegaTeleport')) {
      * iMegaTeleport Class
      *
      * @package iMegaExchanger
-     * @version 1.6.8
+     * @version 1.6.9
      * @author iMega
      */
     class iMegaTeleport
     {
-        const VERSION = '1.6.8';
+        const VERSION = '1.6.9';
         
         const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
               ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
@@ -1381,7 +1381,7 @@ if (! class_exists('iMegaTeleport')) {
                 $contragent->{FIRSTNAME} = $customers[$docNo]['_shipping_first_name'];
                 $contragent->{LASTNAME} = $customers[$docNo]['_shipping_last_name'];
                 
-                $address = $doc->addChild(ADDRESS);
+                $address = $contragent->addChild(ADDRESS);
                 
                 $fields = array(
                     '_shipping_postcode',

@@ -91,6 +91,9 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.6.9 =
+Fix shipping address of order.
+
 = 1.6.8 =
 Fix discount of order.
 
