@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.7
+ * Version: 1.6.8
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -112,6 +112,9 @@ if (! class_exists('iMegaTeleport')) {
     define('GOOD', 'Товар');
     define('SUM', 'Сумма');
     define('RATE', 'Курс');
+    define('DISCOUNTS', 'Скидки');
+    define('DISCOUNT', 'Скидка');
+    define('IN_SUM', 'УчтеноВСумме');
     
     define('MARK_REMOVAL', 'ПометкаУдаления');
     define('HELD', 'Проведен');
@@ -122,12 +125,12 @@ if (! class_exists('iMegaTeleport')) {
      * iMegaTeleport Class
      *
      * @package iMegaExchanger
-     * @version 0.1
+     * @version 1.6.8
      * @author iMega
      */
     class iMegaTeleport
     {
-        const VERSION = '1.6.5';
+        const VERSION = '1.6.8';
         
         const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
               ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
@@ -1418,6 +1421,15 @@ if (! class_exists('iMegaTeleport')) {
                     $attr = $deliveryAttrs->addChild(ATTRIBUTEVALUE);
                     $attr->{NAME} = 'ТипНоменклатуры';
                     $attr->{VALUE} = 'Услуга';
+                }
+
+                if (isset($customers[$docNo]['_order_discount'])) {
+                    $discounts = $doc->addChild(DISCOUNTS);
+
+                    $discount = $discounts->addChild(DISCOUNT);
+                    $discount->{NAME}   = 'Скидка по заказу';
+                    $discount->{SUM}    = $customers[$docNo]['_order_discount'];
+                    $discount->{IN_SUM} = 1;
                 }
 
                 $attrs = $doc->addChild(ATTRIBUTEVALUES);
