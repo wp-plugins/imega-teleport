@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.10
+ * Version: 1.6.11
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5

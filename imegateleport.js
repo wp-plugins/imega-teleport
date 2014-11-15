@@ -21,7 +21,7 @@
 jQuery(document).ready(function () {
     var $progress = parseInt(jQuery('#iMegaExistProgress').val());
 
-    if ($progress == 0) {
+    if (isNaN($progress) || $progress == 0) {
         jQuery('#iMegaProgress').hide();
     }
 
