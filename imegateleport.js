@@ -20,8 +20,9 @@
  */
 jQuery(document).ready(function () {
     var $progress = parseInt(jQuery('#iMegaExistProgress').val());
+    var $typeMsg  = jQuery('#iMegaProgress').attr('class');
 
-    if (isNaN($progress) || $progress == 0) {
+    if ($typeMsg != 'error' && (isNaN($progress) || $progress == 0)) {
         jQuery('#iMegaProgress').hide();
     }
 

@@ -4,11 +4,11 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.11
+ * Version: 1.6.12
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
- * Tested up to: 4.0
+ * Tested up to: 4.0.1
  */
 /**
  * Copyright 2013 iMega ltd (email: info@imega.ru)
@@ -125,12 +125,12 @@ if (! class_exists('iMegaTeleport')) {
      * iMegaTeleport Class
      *
      * @package iMegaExchanger
-     * @version 1.6.10
+     * @version 1.6.12
      * @author iMega
      */
     class iMegaTeleport
     {
-        const VERSION = '1.6.10';
+        const VERSION = '1.6.12';
 
         const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
             ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
@@ -556,7 +556,11 @@ if (! class_exists('iMegaTeleport')) {
                 case 'checkauth':
                     $login = '';
                     $pass = '';
-                    if (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
+
+                    if (defined('IMEGATELEPORT_AUTH_USER') || defined('IMEGATELEPORT_AUTH_PW')) {
+                        $login = IMEGATELEPORT_AUTH_USER;
+                        $pass = IMEGATELEPORT_AUTH_PW;
+                    }elseif (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
                         $login = $_SERVER['PHP_AUTH_USER'];
                         $pass = $_SERVER['PHP_AUTH_PW'];
                     } else {
@@ -564,10 +568,6 @@ if (! class_exists('iMegaTeleport')) {
                             explode(':', base64_decode(substr($_SERVER['HTTP_AUTHORIZATION'], 6)));
                     }
 
-                    if (defined('IMEGATELEPORT_AUTH_USER'))
-                        $login = IMEGATELEPORT_AUTH_USER;
-                    if (defined('IMEGATELEPORT_AUTH_PW'))
-                        $pass = IMEGATELEPORT_AUTH_PW;
                     $user = $this->auth($login, $pass);
                     $this->log("==USER AUTH==");
                     $this->log($user);
@@ -1762,7 +1762,7 @@ if (! class_exists('iMegaTeleport')) {
          */
         function pluginPageSettings ()
         {
-            $text = $this->loadFile('settings-form.htm');
+            $text = $this->loadFile('settings-form.htm', true);
             $text = str_replace('{$title}', __('Settings') . ' ' . $this->name,
                 $text);
             $text = str_replace('{$logo}',
