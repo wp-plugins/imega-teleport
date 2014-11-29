@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.12
+ * Version: 1.6.13
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -125,12 +125,12 @@ if (! class_exists('iMegaTeleport')) {
      * iMegaTeleport Class
      *
      * @package iMegaExchanger
-     * @version 1.6.12
+     * @version 1.6.13
      * @author iMega
      */
     class iMegaTeleport
     {
-        const VERSION = '1.6.12';
+        const VERSION = '1.6.13';
 
         const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
             ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
@@ -775,11 +775,12 @@ if (! class_exists('iMegaTeleport')) {
             if ($_GET['type'] == 'sale') {
                 $listOfFiles = array();
                 if ($this->zip) {
-                    if ($this->unzip($filename, $listOfFiles,
-                        dirname($filename) . '/'))
+                    if ($this->unzip($filename, $listOfFiles, dirname($filename) . '/')) {
                         unlink($filename);
-                } else
+                    }
+                } else {
                     array_push($listOfFiles, $filename);
+                }
 
                 $path = $this->path('basedir') . $this->path($this->mnemo);
 
@@ -960,7 +961,6 @@ if (! class_exists('iMegaTeleport')) {
                     $file  = array_shift($files);
                     $path  = $this->path('basedir') . $this->path($this->mnemo) . 'tmp';
                     $query = file_get_contents("{$path}/$file");
-                    $this->log("LAZY RESOURCE: {$path}/$file");
                     unlink("{$path}/$file");
                     $result[] = $query;
                     break;
@@ -1899,12 +1899,18 @@ if (! class_exists('iMegaTeleport')) {
                 }
             }
             if ($ajax &&
-                $agent == '1C+Enterprise' &&
+                in_array($agent, $agents) &&
                 isset($_GET['mode']) &&
                 $_GET['mode'] == 'import'
             ) {
                 $this->lazyQuery(self::LAZY_FILES);
                 header("HTTP/1.0 200 OK");
+                $error = get_option('imegateleport_error', null);
+                if (null !== $error){
+                    echo "failure\n";
+                    exit();
+                }
+
                 $progress = $this->progress();
                 if ($progress > 0 && $progress < 100) {
                     echo "progress\n";
@@ -1922,12 +1928,6 @@ if (! class_exists('iMegaTeleport')) {
                     $_GET['filename'] == 'offers.xml'
                 ){
                     echo "success\n";
-                    exit();
-                }
-                $error = get_option('imegateleport_error', 0);
-                if ($error != 0){
-                    echo "failure\n";
-                    echo "$error\n";
                     exit();
                 }
             }
@@ -2126,25 +2126,25 @@ if (! class_exists('iMegaTeleport')) {
          */
         function unzip ($zipFile, &$listOfFiles, $destDir = false)
         {
-            if (class_exists('ZipArchive')) {
-                $zip = new ZipArchive();
-                if ($zip) {
-                    $open = $zip->open($zipFile);
-                    if ($open === true) {
-                        $zip->extractTo($destDir);
-                        for ($i = 0; $i < $zip->numFiles; $i++) {
-                            array_push($listOfFiles, $zip->statIndex($i));
-                        }
-                        $zip->close();
-                    } else {
-                        $this->error = '==ZIP ERROR: ' .
-                            $this->zipStatusString($open);
-                    }
-                    return true;
-                }
-            } else {
+            if (! class_exists('ZipArchive')) {
                 return false;
             }
+
+            $zip = new ZipArchive();
+            $open = $zip->open($zipFile);
+            if ($open === true) {
+                $zip->extractTo($destDir);
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    array_push($listOfFiles, $zip->statIndex($i));
+                }
+                $zip->close();
+                $result = true;
+            } else {
+                $this->error = '==ZIP ERROR: ' . $this->zipStatusString($open);
+                $result = false;
+            }
+
+            return $result;
         }
 
         /**
