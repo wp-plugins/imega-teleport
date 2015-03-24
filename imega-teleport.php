@@ -4,7 +4,7 @@
  * Plugin URI: http://teleport.imega.ru
  * Description: EN:Import your products from your 1C to your new WooCommerce store. RU:Обеспечивает взаимосвязь интернет-магазина и 1С.
  * Description: Ссылка для обмена
- * Version: 1.6.13
+ * Version: 1.6.14
  * Author: iMega ltd
  * Author URI: http://imega.ru
  * Requires at least: 3.5
@@ -125,12 +125,17 @@ if (! class_exists('iMegaTeleport')) {
      * iMegaTeleport Class
      *
      * @package iMegaExchanger
-     * @version 1.6.13
+     * @version 1.6.14
      * @author iMega
      */
     class iMegaTeleport
     {
-        const VERSION = '1.6.13';
+        const VERSION = '1.6.14';
+
+        const WAREHOUSES = 'Склады',
+            WAREHOUSE = 'Склад',
+            ID_WAREHOUSE = 'ИдСклада',
+            AMOUNT_WAREHOUSE = 'КоличествоНаСкладе';
 
         const ER_MBSTRING = 'I need the extension mbstring.<br>go to link http://php.net/manual/en/mbstring.installation.php',
             ER_MYSQLI = 'I need the extension MySQLi<br>go to link http://php.net/manual/en/mysqli.installation.php',
@@ -164,6 +169,8 @@ if (! class_exists('iMegaTeleport')) {
 
         protected $filenameFullname = 'fullname.sql';
 
+        protected $article = 'wc-article.sql';
+
         protected $filenameImport = 'import.xml';
 
         protected $filenameOffers = 'offers.xml';
@@ -173,6 +180,8 @@ if (! class_exists('iMegaTeleport')) {
         protected $filenameTables = 'tabs.sql';
 
         protected $filenameBL = 'woocommerce.sql';
+
+        protected $removeTempTabs = 'remove-temp-tabs.sql';
 
         protected $force = false;
 
@@ -214,6 +223,7 @@ if (! class_exists('iMegaTeleport')) {
         {
             set_error_handler(array($this, 'errorHandler'));
             set_exception_handler(array($this, 'exceptionHandler'));
+            delete_option('imegateleport_error');
             $this->options();
             $this->connectMysql();
             $this->errorLoad();
@@ -228,6 +238,12 @@ if (! class_exists('iMegaTeleport')) {
             $this->sets['kod'] = get_option('imegateleport-settings-kod');
             $this->sets['postinstall'] = get_option(
                 'imegateleport-settings-postinstall');
+            $this->sets['article'] = get_option(
+                'imegateleport-settings-article');
+            $this->sets['fulldesc'] = get_option(
+                'imegateleport-settings-fulldesc');
+            $this->sets['warehouse'] = get_option(
+                'imegateleport-settings-warehouse-active');
             if ($this->progress() === false) {
                 $this->gogo = $this->routers();
             }
@@ -315,7 +331,7 @@ if (! class_exists('iMegaTeleport')) {
                 $pattern = '/^([set|insert|select|update|drop|create|replace|truncate](.|\s)*;)$/mU';
                 preg_match_all($pattern, $query, $queries);
                 foreach ($queries[1] as $value) {
-                    $this->values[self::COTHER][] = $value;
+                    $this->setValues(self::COTHER, $value);
                     if ($lazy == self::LAZY_FILES) {
                         $this->saveComposer(self::COTHER);
                         unset($this->values[self::COTHER]);
@@ -323,7 +339,7 @@ if (! class_exists('iMegaTeleport')) {
                 }
                 return;
             }
-            $this->values[self::COTHER][] = $query;
+            $this->setValues(self::COTHER, $query);
 
             return $query;
         }
@@ -342,21 +358,27 @@ if (! class_exists('iMegaTeleport')) {
             $total = $len + mb_strlen($query);
 
             if (IMEGATELEPORT_COMPOSER >= $total && ! $ends) {
-                $this->values[$type][] = $query;
+                $this->setValues($type, $query);
                 $this->len[$type] = $total;
             } else {
                 if ($type == self::COTHER) {
-                    $this->values[$type][] = $this->composerOther($query);
+                    $this->setValues($type, $this->composerOther($query));
                 }
                 $this->saveComposer($type);
                 unset($this->values[$type]);
                 if (! $ends) {
-                    $this->values[$type][] = $query;
+                    $this->setValues($type, $query);
                     $this->len[$type] = strlen($this->keys[$type]);
                 }
             }
 
             return '';
+        }
+
+        private function setValues($type, $value)
+        {
+            $this->values[$type][] = $value;
+            $this->values[$type] = array_unique($this->values[$type]);
         }
 
         /**
@@ -481,6 +503,15 @@ if (! class_exists('iMegaTeleport')) {
         {
             $result = false;
             switch ($param) {
+                case 'article':
+                    $result = true;
+                    break;
+                case 'fulldesc':
+                    $result = true;
+                    break;
+                case 'warehouse-active':
+                    $result = true;
+                    break;
                 case 'fullname':
                     $result = true;
                     break;
@@ -497,8 +528,6 @@ if (! class_exists('iMegaTeleport')) {
             }
             if ($result) {
                 update_option('imegateleport-settings-' . $param, $value);
-                $this->log(
-                    "==UPDATE OPTION (imegateleport-settings-$param) = $value");
             }
             return $result;
         }
@@ -547,7 +576,7 @@ if (! class_exists('iMegaTeleport')) {
          *
          * @return bool
          */
-        function transfer ()
+        function transfer()
         {
             header("HTTP/1.0 200 OK");
             $result = false;
@@ -646,6 +675,7 @@ if (! class_exists('iMegaTeleport')) {
                     $result = true;
                     break;
                 case "query":
+                    $this->debug('===QUERY===');
                     $this->orders();
                     exit();
                     break;
@@ -900,11 +930,11 @@ if (! class_exists('iMegaTeleport')) {
             $postdata = @http_build_query($data);
             $options = array(
                 'http' =>
-                     array(
-                         'method' => 'POST',
-                         'header' => 'Content-type: application/x-www-form-urlencoded',
-                         'content' => $postdata
-                     )
+                    array(
+                        'method' => 'POST',
+                        'header' => 'Content-type: application/x-www-form-urlencoded',
+                        'content' => $postdata
+                    )
             );
             $context = @stream_context_create($options);
             //@file_get_contents('http://teleport.imega.ru/stats/', false, $context);
@@ -1025,13 +1055,13 @@ if (! class_exists('iMegaTeleport')) {
          *
          * @return string
          */
-        function loadImport()
+        function loadImport($filename)
         {
             if ($this->error && $this->force === false) {
                 return;
             }
             $file = $this->path('basedir') . $this->path($this->mnemo) .
-                $this->filenameImport;
+                $filename;
             try {
                 $import = new SimpleXMLElement($file, 0, true);
             } catch (Exception $e) {
@@ -1085,7 +1115,7 @@ if (! class_exists('iMegaTeleport')) {
             if ($catalog->{PRODUCTS}->count() >= 1 &&
                 $catalog->{PRODUCTS}->{PRODUCT}->count() >= 1) {
 
-                $query .= "INSERT INTO {$this->table_prefix}imega_prod(title,descr,guid,slug,catalog_guid,article,img,img_prop)VALUES";
+                $query .= "INSERT INTO {$this->table_prefix}imega_prod(title,descr,excerpt,guid,slug,catalog_guid,article,img,img_prop)VALUES";
                 $query_misc = "INSERT INTO {$this->table_prefix}imega_misc(type,guid,label,val,labelSlug,countAttr,valSlug,_visible)VALUES";
 
                 foreach ($catalog->{PRODUCTS}->{PRODUCT} as $product) {
@@ -1093,7 +1123,36 @@ if (! class_exists('iMegaTeleport')) {
                     $id = substr($id, 0, 36);
                     $name = (string) $product->{NAME};
                     $desc = $this->escape_string($product->{DESC});
+                    $excerpt = '';
+                    if ($this->sets['fulldesc'] == 'true') {
+                        $productArray = (array) $product;
+                        if (isset($productArray[IMAGE])) {
+                            $attaches = (array) $productArray[IMAGE];
+                        } else {
+                            $attaches = '';
+                        }
+                        if (is_array($attaches)) {
+                            foreach ($attaches as $key => $attach) {
+                                if (strpos($attach, '.txt') >= 1) {
+                                    $desc = file_get_contents($this->path('basedir') . $this->path($this->mnemo) . $attach);
+                                }
+                                if (false === $desc) {
+                                    $desc = $this->escape_string($product->{DESC});
+                                    /*
+                                     * @todo $desc = mb_convert_encoding($desc, "utf-8", "windows-1251");
+                                     */
+                                } else {
+                                    $desc = $this->escape_string($desc);
+                                    $excerpt = $this->escape_string($product->{DESC});
+                                }
+                            }
+                        }
+                    }
+
+
                     $img = $this->escape_string($product->{IMAGE});
+
+
                     $img_prop = '';
                     $filename_abs = $this->path($this->mnemo) . $img;
                     $filename = $this->path('basedir') . $filename_abs;
@@ -1110,7 +1169,7 @@ if (! class_exists('iMegaTeleport')) {
                     $name = $this->escape_string($name);
                     $article = $this->escape_string($product->{ARTICLE});
 
-                    $query .= $this->composer(self::CPROD, "('{$name}','{$desc}','{$id}','{$slug}','{$catalog_id}','{$article}','{$img}','{$img_prop}'),");
+                    $query .= $this->composer(self::CPROD, "('{$name}','{$desc}', '{$excerpt}','{$id}','{$slug}','{$catalog_id}','{$article}','{$img}','{$img_prop}'),");
 
                     if ($product->{GROUPS}->count() >= 1)
                         foreach ($product->{GROUPS} as $group) {
@@ -1165,13 +1224,13 @@ if (! class_exists('iMegaTeleport')) {
          *
          * @return string
          */
-        function loadOffers ()
+        function loadOffers($filename)
         {
             if ($this->error && $this->force === false) {
                 return;
             }
             $file = $this->path('basedir') . $this->path($this->mnemo) .
-                $this->filenameOffers;
+                $filename;
 
             try {
                 $offers = new SimpleXMLElement($file, 0, true);
@@ -1188,6 +1247,22 @@ if (! class_exists('iMegaTeleport')) {
             $query2 = '';
             $query3 = '';
 
+            if ($packageoffers->{self::WAREHOUSES}->count() >= 1 &&
+                $packageoffers->{self::WAREHOUSES}->{self::WAREHOUSE}->count() >= 1
+            ) {
+                $warehouse = array();
+
+                foreach ($packageoffers->{self::WAREHOUSES}->{self::WAREHOUSE} as $item) {
+                    $key = (string) $item->{ID};
+                    $value = (string) $item->{NAME};
+                    $warehouse[$key] = $value;
+                }
+                update_option('imegateleport-settings-warehouse', json_encode($warehouse));
+                if (empty($this->sets['warehouse'])) {
+                    update_option('imegateleport-settings-warehouse-active', json_encode($warehouse));
+                }
+            }
+
             if ($packageoffers->{OFFERS}->count() >= 1 &&
                 $packageoffers->{OFFERS}->{OFFER}->count() >= 1) {
                 $query1 .= "INSERT INTO {$this->table_prefix}imega_offers(guid,prod_guid,barcode,title,base_unit,base_unit_key,base_unit_title,base_unit_int,amount,postType)VALUES";
@@ -1201,7 +1276,18 @@ if (! class_exists('iMegaTeleport')) {
                     $base_unit_key = '';//$offer->{BASEUNIT}->attributes()->{KEY};
                     $base_unit_title = '';//$offer->{BASEUNIT}->attributes()->{FULLNAME};
                     $base_unit_int = '';//$offer->{BASEUNIT}->attributes()->{INTERNATIONALABBREVIATION};
-                    $amount = (float) $offer->{AMOUNT};
+                    if (empty($warehouse)) {
+                        $amount = (float) $offer->{AMOUNT};
+                    } else {
+                        $warehouseActive = $this->getWarehouseActive();
+                        $amount = 0;
+                        foreach ($offer->{self::WAREHOUSE} as $item) {
+                            $key = (string) $item->attributes()->{self::ID_WAREHOUSE};
+                            if (array_key_exists($key, $warehouseActive)) {
+                                $amount += (float) $item->attributes()->{self::AMOUNT_WAREHOUSE};
+                            }
+                        }
+                    }
                     $postType = 'product_variation';
 
                     $name = $this->escape_string($name);
@@ -1267,6 +1353,18 @@ if (! class_exists('iMegaTeleport')) {
         }
 
         /**
+         * LOG
+         *
+         * @param array $value
+         */
+        protected function debug ($value)
+        {
+            $f = fopen($this->path('basedir') . 'imegateleport.log', 'a');
+            @fwrite($f, print_r($value, true) . PHP_EOL);
+            @fclose($f);
+        }
+
+        /**
          * Обработка уведомлений и реакции пользователя на них
          *
          * @return void
@@ -1309,33 +1407,29 @@ if (! class_exists('iMegaTeleport')) {
          */
         function orders ()
         {
-            $this->log('==ORDERS==');
+            $this->debug('==ORDERS==');
             $file = dirname(__FILE__) . '/' . $this->filenameOrder;
             try {
                 $order = new SimpleXMLElement($file, 0, true);
             } catch (Exception $e) {
                 echo "failure\n";
+                $this->debug('ORDERS: failure' . $this->error);
                 echo $this->error."\n";
                 return;
             }
-
             $order[DATE_CREATE] = date("Y-m-d");
             $fileQueryItems     = $this->loadFile($this->fileQueryItems);
             $fileQueryCustomer  = $this->loadFile($this->fileQueryCustomer);
-
             if (empty($fileQueryItems) || empty($fileQueryCustomer)) {
                 echo "failure\n";
                 echo $this->error."\n";
                 return;
             }
-
             if (! $this->mysqli->multi_query('set names ' . DB_CHARSET . ';')) {
                 $this->error = $this->mysqli->connect_error;
                 return;
             }
-
             $resItems = $this->mysqli->query($fileQueryItems);
-
             if ($this->mysqlnd) {
                 $itemsRows = $resItems->fetch_all();
             } else {
@@ -1344,7 +1438,6 @@ if (! class_exists('iMegaTeleport')) {
                     $itemsRows[] = $row;
                 }
             }
-
             $resCustomer  = $this->mysqli->query($fileQueryCustomer);
             if ($this->mysqlnd) {
                 $customerRows = $resCustomer->fetch_all();
@@ -1360,13 +1453,11 @@ if (! class_exists('iMegaTeleport')) {
                     $customers[$c[1]][$c[2]] = $c[3];
                 }
             }
-
             /*
              * Выбрать все документы Пересобрать товары в документе
              */
             $docs  = array();
             $items = array();
-
             foreach ($itemsRows as $item) {
                 array_push($docs, $item[0]);
                 $items[$item[0]]['datetime'] = $item[1];
@@ -1375,7 +1466,6 @@ if (! class_exists('iMegaTeleport')) {
 
                 $itemGoods = $items[$item[0]]['goods'];
                 $last = count($items[$item[0]]['goods']);
-
                 if (isset($itemGoods[$last - 1]['title'])) {
                     if ($itemGoods[$last - 1]['title'] == $item[2]) {
                         if ($item[5] === null)
@@ -1406,7 +1496,6 @@ if (! class_exists('iMegaTeleport')) {
              */
             foreach ($docs as $docNo) {
                 $doc = $order->addChild(DOCUMENT);
-
                 $doc->{ID} = $docNo;
                 $doc->{NUMBER} = $docNo;
                 $doc->{CURRENCY} = $customers[$docNo]['_order_currency'];
@@ -1423,7 +1512,6 @@ if (! class_exists('iMegaTeleport')) {
                 $contragent->{LASTNAME} = $customers[$docNo]['_shipping_last_name'];
 
                 $address = $contragent->addChild(ADDRESS);
-
                 $fields = array(
                     '_shipping_postcode',
                     '_shipping_state',
@@ -1432,47 +1520,70 @@ if (! class_exists('iMegaTeleport')) {
                     '_shipping_address_2');
                 $fieldStr = '';
                 foreach ($fields as $field) {
-                    if (empty($customers[$docNo][$field])) {
+                    if (isset($customers[$docNo][$field]) &&
+                        !empty($customers[$docNo][$field])
+                    ) {
                         $fieldStr .= $customers[$docNo][$field] . ',';
                     }
                 }
                 $address->{ADDRESS_TITLE} = mb_substr($fieldStr, 0, - 1);
+
+                if (isset($customers[$docNo]['_shipping_postcode'])) {
+                    $addressField = $address->addChild(ADDRESS_FIELD);
+                    $addressField->{TYPE} = 'Почтовый индекс';
+                    $addressField->{VALUE} = $customers[$docNo]['_shipping_postcode'];
+                }
+
+                if (isset($customers[$docNo]['_shipping_city'])) {
+                    $addressField = $address->addChild(ADDRESS_FIELD);
+                    $addressField->{TYPE} = 'Город';
+                    $addressField->{VALUE} = $customers[$docNo]['_shipping_city'];
+                }
+
+
+                if (isset($customers[$docNo]['_shipping_address_1'])) {
+                    $addressField = $address->addChild(ADDRESS_FIELD);
+                    $addressField->{TYPE} = 'Улица';
+                    $addressField->{VALUE} = $customers[$docNo]['_shipping_address_1'];
+                }
+
                 $goods = $doc->addChild(GOODS);
                 foreach ($items[$docNo]['goods'] as $item) {
                     $good = $goods->addChild(GOOD);
                     $good->{NAME}   = $item['title'];
                     $good->{ID}     = $item['_product_id'];
+                    $baseUnit = $good->addChild(BASEUNIT, 'шт');
+                    $baseUnit->addAttribute('Код', '796');
+                    $baseUnit->addAttribute('НаименованиеПолное', 'Штука');
+                    $baseUnit->addAttribute('МеждународноеСокращение', 'PCE');
                     $good->{AMOUNT} = $item['_qty'];
                     $good->{SUM}    = $item['_line_total'];
                 }
-
                 if (isset($customers[$docNo]['_order_shipping'])) {
                     $good = $goods->addChild(GOOD);
                     $good->{NAME}   = 'Доставка заказа';
                     $good->{ID}     = 'ORDER_DELIVERY';
+                    $baseUnit = $good->addChild(BASEUNIT, 'шт');
+                    $baseUnit->addAttribute('Код', '796');
+                    $baseUnit->addAttribute('НаименованиеПолное', 'Штука');
+                    $baseUnit->addAttribute('МеждународноеСокращение', 'PCE');
                     $good->{AMOUNT} = 1;
                     $good->{SUM}    = $customers[$docNo]['_order_shipping'];
-
                     $deliveryAttrs  = $good->addChild(ATTRIBUTEVALUES);
-
                     $attr = $deliveryAttrs->addChild(ATTRIBUTEVALUE);
                     $attr->{NAME} = 'ВидНоменклатуры';
                     $attr->{VALUE} = 'Услуга';
-
                     $attr = $deliveryAttrs->addChild(ATTRIBUTEVALUE);
                     $attr->{NAME} = 'ТипНоменклатуры';
                     $attr->{VALUE} = 'Услуга';
                 }
-
                 if (isset($customers[$docNo]['_order_discount'])) {
                     $discounts = $doc->addChild(DISCOUNTS);
-
                     $discount = $discounts->addChild(DISCOUNT);
                     $discount->{NAME}   = 'Скидка по заказу';
                     $discount->{SUM}    = $customers[$docNo]['_order_discount'];
                     $discount->{IN_SUM} = 1;
                 }
-
                 $attrs = $doc->addChild(ATTRIBUTEVALUES);
                 $attrNames = array(
                     'Метод оплаты',
@@ -1509,6 +1620,7 @@ if (! class_exists('iMegaTeleport')) {
             }
             if (! $zipFile) {
                 header("Content-type: text/xml; charset=utf-8");
+                $this->debug($xml);
                 print $xml;
             }
         }
@@ -1622,7 +1734,7 @@ if (! class_exists('iMegaTeleport')) {
             $this->keys = array(
                 self::CGROUP => "insert {$this->table_prefix}imega_groups(guid,parent,title,slug)values",
                 self::CPROP => "insert {$this->table_prefix}imega_prop(guid,title,slug,val_type,parent_guid)values",
-                self::CPROD => "insert {$this->table_prefix}imega_prod(title,descr,guid,slug,catalog_guid,article,img,img_prop)values",
+                self::CPROD => "insert {$this->table_prefix}imega_prod(title,descr,excerpt,guid,slug,catalog_guid,article,img,img_prop)values",
                 self::CMISC => "insert {$this->table_prefix}imega_misc(type,guid,label,val,labelSlug,countAttr,valSlug,_visible)values",
                 self::COFFERS => "insert {$this->table_prefix}imega_offers(guid,prod_guid,barcode,title,base_unit,base_unit_key,base_unit_title,base_unit_int,amount,postType)values",
                 self::COFFRES_FEATURES => "insert {$this->table_prefix}imega_offers_features(offer_guid,prodGuid,variantGuid,title,val,titleSlug,valSlug)values",
@@ -1762,7 +1874,7 @@ if (! class_exists('iMegaTeleport')) {
          */
         function pluginPageSettings ()
         {
-            $text = $this->loadFile('settings-form.htm', true);
+            $text = $this->loadFile('settings-form.htm');
             $text = str_replace('{$title}', __('Settings') . ' ' . $this->name,
                 $text);
             $text = str_replace('{$logo}',
@@ -1791,7 +1903,81 @@ if (! class_exists('iMegaTeleport')) {
                 $checked = ' checked value=1';
             $text = str_replace('{$checked_zip}', $checked, $text);
 
+            $checked = '';
+            $article = get_option('imegateleport-settings-article');
+            if ($article == 'true')
+                $checked = ' checked value=1';
+            $text = str_replace('{$checked_article}', $checked, $text);
+
+            $checked = '';
+            $fulldesc = get_option('imegateleport-settings-fulldesc');
+            if ($fulldesc == 'true')
+                $checked = ' checked value=1';
+            $text = str_replace('{$checked_fulldesc}', $checked, $text);
+
+            $opt = get_option('imegateleport-settings-warehouse');
+            $displayWarehouses = 'none';
+            if (!empty($opt)) {
+                $displayWarehouses = 'block';
+                $warehousesActive = $this->getWarehouseActive();
+                $warehouses = json_decode($opt);
+                $stockData = '';
+                $i = 0;
+                foreach ($warehouses as $key => $value) {
+                    $stockData .= $this->getInputCheck($i, $value, array_key_exists($key, $warehousesActive));
+                    $i++;
+                }
+                $text = str_replace('{$warehouses}', $stockData, $text);
+            }
+            $text = str_replace('{$display_warehouses}', $displayWarehouses, $text);
             echo $text;
+        }
+
+        /**
+         * @return array
+         */
+        private function getWarehouse()
+        {
+            $warehouses = array();
+            $opt = get_option('imegateleport-settings-warehouse');
+            if (!empty($opt)) {
+                $warehouses = json_decode($opt, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $warehouses = array();
+                }
+            }
+
+            return $warehouses;
+        }
+
+        /**
+         * @return array
+         */
+        private function getWarehouseActive()
+        {
+            $warehousesActive = array();
+            $active = get_option('imegateleport-settings-warehouse-active');
+            if (!empty($active)) {
+                $warehousesActive = json_decode($active, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $warehousesActive = array();
+                }
+            }
+
+            return $warehousesActive;
+        }
+
+        private function getInputCheck($id, $title, $checked = false)
+        {
+            $flag = '';
+            if ($checked) {
+                $flag = " checked value=1";
+            }
+
+            return "<div style=\"clear:both; height:15px\"></div>"
+            . "<label class=imegasets for=\"warehouse$id\">"
+            . "<input id=\"warehouse$id\" name=\"warehouse$id\" type=checkbox{$flag}>"
+            . "$title</label>";
         }
 
         /**
@@ -1852,7 +2038,26 @@ if (! class_exists('iMegaTeleport')) {
                         exit();
                         break;
                     case 'imegateleport-settings':
-                        echo $this->settings($_POST['param'], $_POST['value']);
+                        $param = $_POST['param'];
+                        $value = $_POST['value'];
+                        if (strpos($param, 'warehouse') !== false) {
+                            $warehouse = $this->getWarehouse();
+                            if (is_array($warehouse)) {
+                                $id = (int) str_replace('warehouse', '', $param);
+                                $warehouseKeys = array_keys($warehouse);
+                                $guid = $warehouseKeys[$id];
+                                $param = 'warehouse-active';
+                                $warehouseActive = $this->getWarehouseActive();
+                                var_dump($warehouseActive);
+                                if ($value == 'true') {
+                                    $warehouseActive[$guid] = $warehouse[$guid];
+                                } else {
+                                    unset($warehouseActive[$guid]);
+                                }
+                                $value = json_encode($warehouseActive);
+                            }
+                        }
+                        echo $this->settings($param, $value);
                         exit();
                         break;
                 }
@@ -1889,6 +2094,7 @@ if (! class_exists('iMegaTeleport')) {
             if (! $ajax && in_array($agent, $agents) &&
                 ($_GET['type'] == 'catalog' || $_GET['type'] == 'sale')
             ) {
+                $this->debug($_GET);
                 return $this->transfer();
             }
 
@@ -1904,6 +2110,7 @@ if (! class_exists('iMegaTeleport')) {
                 $_GET['mode'] == 'import'
             ) {
                 $this->lazyQuery(self::LAZY_FILES);
+                
                 header("HTTP/1.0 200 OK");
                 $error = get_option('imegateleport_error', null);
                 if (null !== $error){
@@ -1924,8 +2131,8 @@ if (! class_exists('iMegaTeleport')) {
                     exit();
                 }
                 if (get_option('imegateleport_complete', 0) == 1 &&
-                    isset($_GET['filename']) &&
-                    $_GET['filename'] == 'offers.xml'
+                    isset($_GET['filename']) //&&
+                    //$_GET['filename'] == 'offers.xml'
                 ){
                     echo "success\n";
                     exit();
@@ -1971,16 +2178,16 @@ if (! class_exists('iMegaTeleport')) {
             $query = $this->composer(self::COTHER,
                 $this->loadFile($this->filenameTables),
                 true);
-
-            $query .= $this->loadImport();
+            $filename = $this->getFileNameSource(CLASSI);
+            $query .= $this->loadImport($filename);
 
             if ($this->sets['fullname'] == 'true') {
                 $query = $this->composer(self::COTHER,
                     $this->loadFile($this->filenameFullname),
                     true);
             }
-
-            $query .= $this->loadOffers();
+            $filename = $this->getFileNameSource(PACKAGEOFFERS);
+            $query .= $this->loadOffers($filename);
             if (defined('IMEGATELEPORT_COMPOSER')) {
                 foreach ($this->keys as $key => $value){
                     if (! empty($value)) {
@@ -1997,13 +2204,40 @@ if (! class_exists('iMegaTeleport')) {
                 $queryBL);
             $query .= $this->composer(self::COTHER, $queryBL, true);
             $queryBL = '';
+            if ($this->sets['article'] == 'true') {
+                $query = $this->composer(
+                    self::COTHER,
+                    $this->loadFile($this->article),
+                    true
+                );
+            }
+
+            $query = $this->composer(self::COTHER,
+                $this->loadFile($this->removeTempTabs),
+                true);
+
             $this->progress(20);
             update_option('imegateleport_files', count($this->getComposer()));
             $this->query = $query;
         }
 
+        private function getFileNameSource($type)
+        {
+            $path = $this->path('basedir') . $this->path($this->mnemo);
+            $files = scandir($path, SCANDIR_SORT_DESCENDING);
+            foreach ($files as $file) {
+                if (strpos($file, '.xml') >= 1) {
+                    $res = file_get_contents($path . $file, null, null, 0, 500);
+                    if (mb_strpos($res, $type) > 0) {
+                        return $file;
+                    }
+                }
+            }
+        }
+
         private function sendQuery($value)
         {
+            $this->log($value);
             if (function_exists('mysqli_multi_query')) {
                 $this->sendQueryMulti($value);
             } else {

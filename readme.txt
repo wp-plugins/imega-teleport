@@ -91,6 +91,15 @@ iMegaTeleport выгружает данные о товаре: название,
 
 == Changelog ==
 
+= 1.6.14 =
+New option Использовать файл описания товара
+New option В поле SKU отображать Артикул (по умолчанию Штрихкод)
+New option Остатки товаров на складах
+Fix accepted files
+Add WAREHOUSES
+Add ADDRESS the orders
+Fix queries and js
+
 = 1.6.12 =
 Fix queries and js
 
